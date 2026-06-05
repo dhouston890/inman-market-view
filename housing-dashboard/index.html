@@ -1,0 +1,3083 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inman Local Housing Dashboard</title>
+<!-- Embed mode: when this page is framed (or loaded with ?embed=1), flag it so
+     the layout flows to its true content height and the height broadcaster runs.
+     Set as early as possible to avoid a flash of the standalone (100vh) layout. -->
+<script>
+  if (window.self !== window.top || /[?&]embed\b/.test(location.search)) {
+    document.documentElement.classList.add("embed");
+  }
+</script>
+
+<!-- Brand-font substitutes (Google Fonts). The real Inman fonts are
+     proprietary with no CDN; these are near-identical open substitutes:
+       Libre Franklin ≈ HEX Franklin (UI / body / data)
+       Newsreader     ≈ Harriet Display (editorial headlines only)
+       Oswald         ≈ Tungsten (wordmark / impact)
+     The real font names stay FIRST in each CSS stack, so self-hosting the
+     true fonts later auto-upgrades with no code change. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- External libraries (CDN, no build step) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@11.2.3/public/assets/styles/choices.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css"/>
+
+<style>
+/* ============================================================================
+   Inman Local Housing Dashboard — chrome styles
+   Brand: https://inman-product.github.io/brand-standards/brand-system/
+   ============================================================================ */
+:root {
+  /* ---- brand anchors (unchanged hues) ---- */
+  --inman-blue: #0a84ff;
+  --inman-dark: #161a48;
+  --inman-red:  #da3832;        /* reserved for DATA semantics only — never UI chrome */
+
+  /* tints derived from brand colors for subtle accents */
+  --inman-blue-soft: #eef5ff;   /* row hover / selected wash */
+  --inman-blue-line: #cfe2ff;
+  --inman-blue-hover:#0a6fd6;   /* darker brand blue for button/pill hovers */
+  --inman-blue-ink:  #0858a8;   /* deep blue for text on light, links pressed */
+  --inman-dark-2:    #20275c;   /* masthead gradient top */
+  --inman-dark-3:    #2b3270;   /* hairlines / accents on navy */
+  --map-bg:          #e9eef4;   /* neutral wash behind the choropleth */
+
+  --bg:         #ffffff;
+  --workspace:  #eceff5;        /* cool light gray terminal canvas behind panels */
+  --panel:      #f4f7fb;        /* subtle fills: table header, pills, insets */
+  --border:     #e1e6ef;        /* hairline on cards */
+  --border-strong: #ccd3e0;     /* input borders, stronger dividers */
+  --text:       #181d2e;
+  --text-muted: #5c6479;
+  --text-dim:   #98a0b2;
+  --text-onDark:    #ffffff;
+  --text-onDark-mut:#a7adcf;    /* muted text on the dark masthead */
+
+  --pos: #157a55;               /* growth / positive (data only) */
+  --neg: var(--inman-red);      /* decline / negative (data only) */
+
+  --font-ui:       "HEX Franklin", "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  --font-headline: "Harriet Display", "Newsreader", Georgia, serif;
+  --font-impact:   "Tungsten", "Oswald", "Helvetica Neue Condensed", Impact, sans-serif;
+
+  /* Sharper, editorial corners — closer to the Inman brand's 0-radius cards. */
+  --radius:    3px;
+  --radius-lg: 4px;
+  --radius-pill: 999px;
+
+  --pad-xs: 4px;
+  --pad-s:  8px;
+  --pad-m:  16px;
+  --pad-l:  24px;
+  --pad-xl: 32px;
+
+  /* Flat by default — structure carried by hairline borders, not soft shadows. */
+  --shadow-sm: 0 1px 1px rgba(22,26,72,.03);
+  --shadow-md: 0 6px 22px -10px rgba(22,26,72,.28);
+  --shadow-lg: 0 18px 44px -16px rgba(22,26,72,.34);
+
+  /* Shared micro-label (kicker) treatment used across panel heads + form labels. */
+  --kicker-size: 10.5px;
+  --kicker-ls: 0.12em;
+  --work-h: 604px;              /* shared height of the map hero + right rail */
+
+  --tnum: "tnum" 1, "lnum" 1;
+
+  --t-fast: 120ms ease;
+  --t-med:  180ms ease;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background-color: var(--workspace);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-osmoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--inman-blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Editorial headlines only (brand: serif never for UI/nav/data). */
+h1, h2, h3 {
+  font-family: var(--font-headline);
+  font-weight: 600;
+  margin: 0;
+  color: var(--inman-dark);
+  letter-spacing: -0.01em;
+}
+
+/* All numeric displays get tabular, lining figures for clean alignment. */
+.map-legend,
+#table,
+.metric-card .value,
+.acs-row,
+.pill { font-variant-numeric: tabular-nums lining-nums; }
+
+/* Visible, on-brand focus rings for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--inman-blue);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* ...except Leaflet's interactive vector shapes (the map polygons). They're
+   focusable, so clicking one would draw that brand-blue focus ring around the
+   path's rectangular bounding box — the stray blue rectangle. The selection
+   already has a clear indicator (black outline + zoom + panel + callout), so the
+   ring is redundant noise on the map. Suppressed for map shapes only; every real
+   UI control (buttons, dropdowns, table) keeps its focus ring for accessibility. */
+.leaflet-container .leaflet-interactive:focus,
+.leaflet-container .leaflet-interactive:focus-visible { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ---- top-level layout ---- */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+/* Embed mode (in an iframe or ?embed=1): let html/body/.app flow to the TRUE
+   content height instead of filling the viewport, so the host page can size the
+   iframe to fit exactly — no clipping, no excess whitespace. Paired with the
+   postMessage height broadcaster (initEmbedHeight). */
+html.embed, html.embed body { height: auto; }
+html.embed .app { min-height: 0; }
+
+header.app-header {
+  padding: 0 var(--pad-xl);
+  height: 58px;
+  background: var(--inman-dark);
+  display: flex;
+  align-items: center;
+  gap: var(--pad-l);
+  position: relative;
+  z-index: 1100;
+  /* The brand 'blue line' motif from the logo's dot — a crisp accent rule that
+     anchors the masthead and signals interactivity below. */
+  border-bottom: 2px solid var(--inman-blue);
+}
+/* Brand lockup — the "Inman Market View" stacked logo (white INMAN over blue
+   MARKET VIEW), designed for the dark masthead. Height-sized; a hairline
+   divider separates the wordmark from the tool name. */
+header.app-header .brand-logo {
+  display: block;
+  height: 38px;
+  width: auto;
+  padding-right: var(--pad-l);
+  border-right: 1px solid var(--inman-dark-3);
+}
+/* Product name reads as UI, not editorial — sans, uppercase, tracked, like a
+   module title in a research terminal (brand rule: serif is never used for UI). */
+header.app-header h1 {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-onDark);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+/* Full-screen toggle — small ghost icon button on the dark masthead.
+   margin-left:auto pushes it to the right edge (the nav that previously
+   held this auto-margin was removed with the Inflation tab). */
+header.app-header .icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; margin-left: auto;
+  color: var(--text-onDark-mut); background: transparent;
+  border: 1px solid var(--inman-dark-3); border-radius: var(--radius);
+  cursor: pointer; transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+}
+header.app-header .icon-btn:hover { color: var(--text-onDark); background: rgba(255,255,255,.08); border-color: var(--inman-blue); }
+
+/* In native fullscreen, let the dashboard fill the screen and scroll. */
+.app:fullscreen { width: 100vw; height: 100vh; overflow-y: auto; background: var(--workspace); }
+.app:-webkit-full-screen { width: 100vw; height: 100vh; overflow-y: auto; background: var(--workspace); }
+
+/* ---- controls bar ---- */
+section.controls {
+  display: flex;
+  gap: var(--pad-l);
+  align-items: end;
+  padding: 13px var(--pad-xl);
+  flex-wrap: wrap;
+  /* Sticky shared filter bar: metric + view + jump-to-metro stay visible as
+     you scroll down to the chart, so the map and chart always reflect ONE
+     selection (single source of truth — no duplicate selectors to sync).
+     A solid bg + shadow make it read as a floating bar over content. The
+     z-index must clear Leaflet's own control layer (the +/- zoom buttons sit at
+     z-index 1000), so the sticky bar — AND any Choices dropdown it contains,
+     which is trapped in this stacking context — paints above the map's zoom
+     controls and the table/summary boxes, in both the downward and upward
+     (flipped) dropdown directions. */
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 10px 18px -16px rgba(22,26,72,0.5);
+}
+.choices { position: relative; margin-bottom: 0; }
+.choices__list--dropdown,
+.choices__list[aria-expanded] { z-index: 1201; }
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pad-xs);
+  min-width: 180px;
+}
+.control-group label {
+  font-size: var(--kicker-size);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--kicker-ls);
+  color: var(--text-muted);
+}
+
+/* ---- main split: map + table ---- */
+section.main {
+  display: grid;
+  grid-template-columns: 1fr 408px;
+  gap: var(--pad-l);
+  padding: var(--pad-l) var(--pad-xl);
+  flex: 1;
+  min-height: var(--work-h);
+}
+@media (max-width: 1100px) {
+  section.main { grid-template-columns: 1fr; }
+  /* Keep the sticky filter bar from eating the viewport on narrow screens:
+     tighter gap + smaller control min-width so the three dropdowns still fit. */
+  section.controls { gap: var(--pad-m); }
+  .controls .control-group { min-width: 160px; }
+}
+
+/* ---- panel / module system ----
+   Every workspace surface is a 'module': a bordered panel with an optional head
+   bar carrying a tracked kicker preceded by a small brand-blue tick. One visual
+   grammar across the map, the rankings rail, and the time series. */
+.panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+.panel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--pad-m);
+  padding: 12px var(--pad-m) 11px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex: 0 0 auto;
+}
+.panel-kicker {
+  font-size: var(--kicker-size); font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--kicker-ls);
+  color: var(--inman-dark);
+  position: relative; padding-left: 13px;
+}
+.panel-kicker::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 12px; background: var(--inman-blue); border-radius: 2px;
+}
+.panel-hint { font-size: 11.5px; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+
+/* Map hero: the panel carries the frame; the map fills the rest full-bleed. */
+.panel--map { height: var(--work-h); }
+.panel--map .map-wrap {
+  flex: 1; min-height: 0;
+  border: none; border-radius: 0; box-shadow: none;
+}
+.map-wrap {
+  position: relative;
+  overflow: hidden;
+  background: var(--map-bg);
+}
+#map { width: 100%; height: 100%; min-height: 0; }
+/* High-quality anti-aliasing for the choropleth boundaries (CBSA + ZIP). Keeps
+   the thin polygon strokes smooth and well-defined rather than fuzzy. NOT
+   "crispEdges" — that would disable AA and staircase the many diagonal ZIP
+   borders. */
+.leaflet-overlay-pane svg path { shape-rendering: geometricPrecision; }
+.map-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 500;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 11px 13px 10px;
+  font-size: 11px;
+  min-width: 232px;
+  box-shadow: var(--shadow-md);
+}
+.map-legend .title {
+  font-weight: 700;
+  margin-bottom: 3px;
+  color: var(--inman-dark);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.map-legend .swatch {
+  display: inline-block;
+  width: 14px;
+  height: 12px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.map-legend .row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.map-legend .scale {
+  display: flex;
+  height: 12px;
+  margin: 7px 0 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(22,26,72,.06);
+}
+.map-legend .scale .bin {
+  flex: 1;
+  height: 100%;
+}
+.map-legend .scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.table-wrap {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  /* Definite height (matches the map hero) — NOT just min-height — so the inner
+     panels can clip and scroll. The table is a fixed-height Tabulator, but the
+     metro-detail panel's content is tall; without a bounded parent it would
+     stretch this column past the map and leave dead space beside it. With a
+     fixed height, #metro-panel (flex:1; min-height:0; overflow-y:auto) scrolls
+     internally, exactly like the metro list. */
+  height: var(--work-h);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+}
+.table-wrap .table-header {
+  padding: 12px var(--pad-m) 11px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--inman-dark);
+  position: relative;
+  padding-left: 29px;
+  flex: 0 0 auto;
+}
+/* brand-blue module tick, matching .panel-kicker */
+.table-wrap .table-header::before {
+  content: ""; position: absolute; left: var(--pad-m); top: 50%; transform: translateY(-50%);
+  width: 3px; height: 12px; background: var(--inman-blue); border-radius: 2px;
+}
+
+/* ---- Tabulator theme override (scoped to our table) ---- */
+/* The scroll wrapper fills the rail below the header so the table uses the full
+   panel height (Tabulator height:"100%" resolves against this definite box) —
+   no dead white space at the bottom. */
+.table-scroll { flex: 1 1 auto; min-height: 0; }
+#table {
+  font-family: var(--font-ui);
+  border: none;
+  background: var(--bg);
+}
+#table .tabulator-header {
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--panel);
+}
+#table .tabulator-col {
+  background: var(--panel);
+  border-right: none;
+}
+#table .tabulator-col .tabulator-col-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;   /* one micro-label pattern across the dashboard */
+  color: var(--text-muted);
+  /* left padding so the column titles don't hug the edge and line up with the
+     cell text below them (cells use the same 14px). */
+  padding: 4px 0 4px 14px;
+}
+#table .tabulator-row {
+  border-bottom: 1px solid var(--border);
+  transition: background var(--t-fast);
+  cursor: pointer;   /* rows are clickable → select that market */
+}
+#table .tabulator-row.tabulator-row-even {
+  background: var(--bg);   /* no zebra — cleaner with hairlines */
+}
+#table .tabulator-row:hover {
+  background: var(--inman-blue-soft) !important;
+}
+#table .tabulator-row .tabulator-cell {
+  border-right: none;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+/* right-aligned numeric columns get tabular figures */
+#table .tabulator-cell[tabulator-field="value"],
+#table .tabulator-cell[tabulator-field="as_of"] {
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--text);
+}
+#table .tabulator-cell[tabulator-field="cbsa_name"] {
+  font-weight: 500;
+  color: var(--inman-dark);
+}
+#table .tabulator-cell[tabulator-field="as_of"] {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+/* sort indicator in brand blue */
+#table .tabulator-col.tabulator-sortable[aria-sort="ascending"] .tabulator-col-content .tabulator-col-sorter,
+#table .tabulator-col.tabulator-sortable[aria-sort="descending"] .tabulator-col-content .tabulator-col-sorter {
+  color: var(--inman-blue);
+}
+/* empty-state placeholder ("No markets have data for this view") */
+#table .tabulator-placeholder .tabulator-placeholder-contents,
+#table .tabulator-placeholder span {
+  font-size: 13px; font-weight: 500; color: var(--text-muted);
+}
+
+/* ---- chart panel (module: head + padded body) ---- */
+section.chart-panel {
+  margin: 0 var(--pad-xl) var(--pad-l);
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  /* NOT overflow:hidden — the "Compare markets" dropdown opens UPWARD (the
+     control sits low on the page) and must be able to escape the card's top
+     edge. (CSS can't clip only the x-axis while letting the y-axis overflow, so
+     a card-style hidden overflow would clip the dropdown.) The rounded corners
+     still hold via border-radius, and the chart canvas lives inside the padded
+     .chart-body, well within the border, so nothing bleeds past the radius. */
+  overflow: visible;
+  min-height: 280px;
+}
+.chart-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--pad-m);
+  padding: 12px var(--pad-l) 11px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.chart-panel-header h2 {
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--inman-dark);
+  position: relative;
+  padding-left: 13px;
+}
+.chart-panel-header h2::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 13px; background: var(--inman-blue); border-radius: 2px;
+}
+.chart-body { padding: var(--pad-l); }
+.chart-panel-header .meta { font-size: 12px; color: var(--text-muted); }
+.chart-header-right {
+  display: flex; align-items: center; gap: var(--pad-m);
+  flex-wrap: wrap; justify-content: flex-end;
+}
+.btn-chart-reset {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--inman-blue);
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 5px 13px;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.btn-chart-reset:hover { background: var(--inman-blue-soft); border-color: var(--inman-blue); color: var(--inman-blue-ink); }
+#chart { width: 100%; height: 340px; }
+
+/* Multi-select for chart comparison */
+.chart-controls {
+  margin-bottom: var(--pad-m);
+  position: relative;
+  /* This z-index also defines the stacking context that the compare dropdown
+     lives in. It opens UPWARD (the control sits low on the page) over the map +
+     table, so it must clear Leaflet's layers (panes/controls up to z-index
+     1000); 50 left it trapped behind the map. 1100 keeps it above the map yet
+     below the sticky top filter bar (1200). */
+  z-index: 1100;
+  max-width: 560px;
+}
+.chart-controls label {
+  font-size: var(--kicker-size);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--kicker-ls);
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: var(--pad-xs);
+}
+/* Label row: "Compare metros" on the left, a subtle "Clear" on the right. */
+.chart-controls-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pad-s);
+}
+.chart-controls-head label { margin-bottom: var(--pad-xs); }
+.btn-chart-clear {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 1px 4px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.btn-chart-clear:hover { color: var(--inman-blue); background: var(--inman-blue-soft); }
+.btn-chart-clear:focus-visible { outline: 2px solid var(--inman-blue); outline-offset: 1px; }
+.btn-chart-clear[hidden] { display: none; }
+
+/* ---- Choices.js dropdown restyle (applies to all dropdowns) ---- */
+.choices__inner {
+  min-height: 38px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 5px 8px 3px;
+  font-size: 14px;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.choices.is-focused .choices__inner,
+.choices.is-open .choices__inner {
+  border-color: var(--inman-blue);
+  box-shadow: 0 0 0 3px var(--inman-blue-soft);
+}
+.choices[data-type*="select-one"] .choices__inner { padding-bottom: 5px; }
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  margin-top: 4px;
+  overflow: hidden;
+}
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list[aria-expanded] .choices__item--selectable.is-highlighted {
+  background: var(--inman-blue-soft);
+  color: var(--inman-dark);
+}
+/* Wrap long option labels at WORD boundaries, hyphenating long words at
+   syllable points rather than breaking mid-word (publishing best practice).
+   hyphens:auto relies on <html lang="en">. Applies to the open menu only —
+   multi-select chips keep their own (non-wrapping) styling above. */
+.choices__list--dropdown .choices__item,
+.choices__list[aria-expanded] .choices__item {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  line-height: 1.3;
+}
+.choices__list--multiple .choices__item {
+  background: var(--inman-blue);
+  border: 1px solid var(--inman-blue);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  padding: 3px 10px;
+  font-weight: 500;
+}
+.choices__list--multiple .choices__item .choices__button {
+  border-left-color: rgba(255,255,255,.4);
+  margin-left: 8px;
+}
+.choices__input { background: transparent; font-size: 14px; }
+/* The compare multi-select's placeholder ("Type a market name…", 19 chars) was
+   clipped on the right: Choices writes an INLINE `min-width: 16ch` on the cloned
+   typing input (too short), and an inline style beats a normal stylesheet rule.
+   Override it with !important and enough width for the full placeholder; the
+   input still grows/wraps after chips are added (the box holds up to 5). */
+.chart-controls .choices__input--cloned { min-width: 22ch !important; }
+
+/* Native <select> (e.g. the 3-option "View" picker) styled to rhyme with
+   the Choices.js inner so all dropdowns read as one design system. */
+.control-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+  background-color: var(--bg);
+  /* custom caret */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 9px 32px 9px 12px;
+  min-height: 38px;
+  width: 100%;
+  cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.control-group select:hover { border-color: var(--text-dim); }
+.control-group select:focus-visible {
+  border-color: var(--inman-blue);
+  box-shadow: 0 0 0 3px var(--inman-blue-soft);
+  outline: none;
+}
+
+/* ---- Filter bar: make the three dropdowns one identical box ----
+   The native <select> ("View") and the two Choices boxes ("Metric",
+   "Jump to metro") shipped with different internal padding + min-heights, so
+   they rendered at slightly different sizes. Lock all three to one 40px box
+   with an identical model. Scoped to .controls so the chart's multi-select
+   compare box (which must grow to hold up to 5 chips) is left alone. */
+.controls .control-group { min-width: 200px; }
+.controls .choices,
+.controls .choices__inner,
+.controls .control-group select { box-sizing: border-box; }
+.controls .choices__inner {
+  min-height: 40px;
+  height: 40px;
+  /* reserve 32px on the right for the caret so the selected text never sits
+     under it */
+  padding: 0 32px 0 12px;
+  display: flex;
+  align-items: center;
+  /* same SVG chevron as the native <select> below, so all three filter
+     dropdowns (Metric, View, Jump to market) share one arrow glyph */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+/* beat the global select-one padding rule so vertical centering holds */
+.controls .choices[data-type*="select-one"] .choices__inner { padding: 0 32px 0 12px; }
+/* hide Choices' default triangle — replaced by the shared chevron above */
+.controls .choices[data-type*="select-one"]::after { display: none; }
+.controls .choices__list--single { padding: 0; width: 100%; }
+.controls .control-group select {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 32px 0 12px;
+  line-height: 1.2;
+}
+/* Fullscreen button mirrored into the filter bar (light-background variant of
+   the masthead icon-btn). margin-left:auto right-aligns it; align-self:end
+   lines it up with the 40px dropdown boxes. Shown via JS only when the masthead
+   button is off-screen. */
+.controls .icon-btn-bar {
+  margin-left: auto;
+  align-self: end;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.controls .icon-btn-bar:hover { color: var(--inman-dark); border-color: var(--text-dim); }
+.controls .icon-btn-bar[hidden] { display: none; }
+
+/* ---- inline metro-detail panel (replaces the old slide-over drawer) ---- */
+#table-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* Explicit [hidden] override — an ID rule (#table-panel{display:flex}) beats
+   the UA default [hidden]{display:none}, so without this the table wouldn't
+   actually hide when the metro panel opens (it would append below it). */
+#table-panel[hidden] { display: none; }
+#metro-panel {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: var(--pad-m) var(--pad-l) var(--pad-l);
+}
+#metro-panel[hidden] { display: none; }
+.btn-return {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--inman-blue); background: var(--inman-blue-soft);
+  border: 1px solid var(--inman-blue-line); border-radius: var(--radius-pill);
+  padding: 6px 14px; cursor: pointer; margin-bottom: var(--pad-m);
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.btn-return:hover { background: var(--inman-blue); color: #fff; border-color: var(--inman-blue); }
+#metro-panel h2 { margin-bottom: 3px; font-size: 24px; line-height: 1.1; }
+#metro-panel .subtitle { color: var(--text-muted); margin-bottom: var(--pad-l); font-size: 12.5px; }
+#metro-panel .metric-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px var(--pad-m);
+  margin-bottom: 7px;
+  background: var(--bg);
+}
+/* No hover lift: these cards are read-only (not clickable), so a hover shadow
+   would falsely suggest interactivity. */
+/* The selected metric's card is pinned to the top with a subtle brand accent
+   (inset bar avoids any layout shift vs. the other cards). */
+#metro-panel .metric-card--selected {
+  background: var(--inman-blue-soft);
+  border-color: var(--inman-blue-line);
+  box-shadow: inset 3px 0 0 var(--inman-blue);
+}
+/* Gap between the annual-baseline box and the remaining metric cards below it. */
+#metro-metrics-rest { margin-top: var(--pad-l); }
+/* Card-content typography is shared by the metro panel AND the in-map card
+   (renderMapMetricCard reuses metricCardHTML), so these inner-element rules match
+   both containers. The card CONTAINER chrome (border/padding/accent) stays
+   scoped to #metro-panel; the in-map card shell supplies its own framing. */
+:is(#metro-panel, #map-metric-card) .metric-card .name {
+  font-size: var(--kicker-size); font-weight: 700; text-transform: uppercase; letter-spacing: var(--kicker-ls);
+  color: var(--text-muted);
+}
+:is(#metro-panel, #map-metric-card) .metric-card .value {
+  font-family: var(--font-ui);     /* data → sans per brand rule */
+  font-weight: 700;
+  font-size: 25px; color: var(--inman-dark);
+  margin-top: 3px; letter-spacing: -0.01em;
+}
+:is(#metro-panel, #map-metric-card) .metric-card .pills {
+  display: flex; gap: 5px; margin-top: 10px; font-size: 11.5px; flex-wrap: wrap;
+}
+:is(#metro-panel, #map-metric-card) .metric-card .pill {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+:is(#metro-panel, #map-metric-card) .metric-card .as-of {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+#metro-panel .acs-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: var(--pad-m);
+  margin-top: var(--pad-l);
+  border-radius: var(--radius);
+}
+#metro-panel .acs-panel h3 {
+  font-family: var(--font-ui);
+  font-size: 11px; margin-bottom: 3px;
+  text-transform: uppercase; letter-spacing: var(--kicker-ls); font-weight: 700;
+  color: var(--inman-dark);
+}
+#metro-panel .acs-panel .vintage {
+  font-size: 11px; color: var(--text-muted); margin-bottom: var(--pad-s);
+}
+#metro-panel .acs-row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 14px;
+  padding: 9px 0; border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+#metro-panel .acs-row:last-child { border-bottom: none; }
+#metro-panel .acs-row .acs-label { color: var(--text); padding-top: 2px; }
+#metro-panel .acs-figure { text-align: right; white-space: nowrap; }
+#metro-panel .acs-figure .acs-val {
+  font-weight: 600; color: var(--inman-dark);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+#metro-panel .acs-figure .acs-rank {
+  display: inline-block; margin-left: 8px;
+  padding: 1px 8px; border-radius: var(--radius-pill);
+  background: var(--inman-blue-soft); color: var(--inman-dark);
+  font-size: 11px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+#metro-panel .acs-figure .acs-ctx {
+  display: block; margin-top: 3px;
+  font-size: 11px; color: var(--text-muted);
+}
+/* a subtle hint shown on the map when a ZIP-capable metric is active */
+.zip-hint {
+  position: absolute; left: 12px; top: 12px; z-index: 500;
+  background: var(--inman-dark); color: #fff;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 6px 12px; border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md); pointer-events: none;
+  border: 1px solid var(--inman-dark-3);
+  white-space: nowrap;
+}
+.zip-hint[hidden] { display: none; }
+
+/* Floating "Return to national view" pill — shown on the map only when a
+   metro is selected; absent in national view. Stands out (brand-blue),
+   anchored top-left, costs no permanent layout space. (Leaflet's zoom
+   control is moved to the top-right so they don't collide.) */
+.map-return {
+  position: absolute; left: 12px; top: 12px; z-index: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-ui); font-size: 12.5px; font-weight: 600;
+  color: #fff; background: var(--inman-blue);
+  border: none; border-radius: var(--radius-pill);
+  padding: 8px 15px; cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: background var(--t-fast), transform var(--t-fast);
+}
+.map-return:hover { background: var(--inman-blue-hover); transform: translateY(-1px); }
+.map-return[hidden] { display: none; }
+
+/* In-map selected-metric card — an HTML overlay pinned to a free corner of the
+   map (bottom-left), sized to fit WITHIN the map with margin so it never covers
+   the selected polygon. It connects to the metro by a leader line (.map-leader)
+   that points at the NEAREST polygon BORDER, so the whole polygon stays visible.
+   As a .map-wrap child it paints above ALL of the map's own content (including
+   the basemap place-name labels), so labels sit behind it. Regional (non-ZIP)
+   mode only — see renderMapMetricCard / updateMapLeader. */
+.map-metric-card {
+  position: absolute; left: 12px; bottom: 14px; z-index: 620;
+  width: 244px;
+  max-width: 42%;                       /* fit within the map, clear of the legend */
+  max-height: calc(100% - 28px);
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: var(--pad-m);
+  color: var(--text);
+  font-family: var(--font-ui);
+  border-top: 2px solid var(--inman-blue);
+}
+.map-metric-card[hidden] { display: none; }
+.map-metric-card .mmc-market {
+  font-size: 12.5px; font-weight: 700; color: var(--inman-dark);
+  margin-bottom: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--border);
+  white-space: normal; line-height: 1.25;
+}
+/* The inner metric card supplies content only; the card shell carries the
+   framing, so strip the inner card's own chrome. */
+.map-metric-card .metric-card,
+.map-metric-card .metric-card--selected {
+  border: none; padding: 0; margin: 0; background: transparent; box-shadow: none;
+}
+/* SVG leader line from the card edge to the nearest polygon border. Sits above
+   the legend but below the card; never intercepts clicks. */
+.map-leader {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: 590; pointer-events: none;
+}
+.map-leader[hidden] { display: none; }
+.map-leader line { stroke: var(--inman-blue); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.map-leader circle { fill: var(--inman-blue); }
+.map-leader .leader-tip { stroke: #fff; stroke-width: 1.5; }
+
+/* On a narrow map (mobile / narrow embed) keep the legend and the in-map card
+   from blanketing the choropleth or colliding with each other. */
+@media (max-width: 700px) {
+  .map-legend { min-width: 0; max-width: 50%; }
+  .map-metric-card { width: 190px; max-width: 48%; padding: var(--pad-s); }
+}
+
+/* ---- footer (bookends the navy masthead) ---- */
+footer.app-footer {
+  padding: var(--pad-l) var(--pad-xl);
+  border-top: 2px solid var(--inman-blue);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-onDark-mut);
+  background: var(--inman-dark);
+}
+footer.app-footer .footer-credit { display: block; color: var(--text-onDark-mut); }
+footer.app-footer .footer-method {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7e85b0;
+}
+
+/* ---- coloring helpers ---- */
+.delta-positive { color: var(--pos); font-weight: 600; }
+.delta-negative { color: var(--neg); font-weight: 600; }
+.delta-neutral  { color: var(--text-muted); }
+
+/* ---- loading overlay ---- */
+.loading {
+  position: absolute;
+  inset: 0;
+  background: rgba(236,239,245,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--kicker-ls);
+  z-index: 600;
+  transition: opacity 0.25s;
+}
+.loading.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---- sleek, unobtrusive scrollbars (internal scroll areas only) ----
+   Transparent track (no reserved real estate) + a thin pill thumb that's
+   invisible at rest and fades in on hover/scroll of its container. Firefox uses
+   the scrollbar-* properties; WebKit/Blink uses the ::-webkit-scrollbar pseudos. */
+#metro-panel,
+.map-metric-card,
+#table .tabulator-tableholder {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;     /* thumb / track — hidden at rest */
+  transition: scrollbar-color var(--t-med);
+}
+#metro-panel:hover, #metro-panel:focus-within,
+.map-metric-card:hover, .map-metric-card:focus-within,
+#table .tabulator-tableholder:hover {
+  scrollbar-color: rgba(22,26,72,.32) transparent;
+}
+#metro-panel::-webkit-scrollbar,
+.map-metric-card::-webkit-scrollbar,
+#table .tabulator-tableholder::-webkit-scrollbar {
+  width: 10px; height: 10px;
+}
+#metro-panel::-webkit-scrollbar-track,
+.map-metric-card::-webkit-scrollbar-track,
+#table .tabulator-tableholder::-webkit-scrollbar-track,
+#metro-panel::-webkit-scrollbar-corner,
+.map-metric-card::-webkit-scrollbar-corner,
+#table .tabulator-tableholder::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Thumb: a slim pill, inset via a transparent border, invisible until hover. */
+#metro-panel::-webkit-scrollbar-thumb,
+.map-metric-card::-webkit-scrollbar-thumb,
+#table .tabulator-tableholder::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: padding-box;
+  transition: background-color var(--t-med);
+}
+#metro-panel:hover::-webkit-scrollbar-thumb,
+#metro-panel:focus-within::-webkit-scrollbar-thumb,
+.map-metric-card:hover::-webkit-scrollbar-thumb,
+#table .tabulator-tableholder:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(22,26,72,.28);
+}
+#metro-panel::-webkit-scrollbar-thumb:hover,
+.map-metric-card::-webkit-scrollbar-thumb:hover,
+#table .tabulator-tableholder::-webkit-scrollbar-thumb:hover,
+#metro-panel::-webkit-scrollbar-thumb:active,
+.map-metric-card::-webkit-scrollbar-thumb:active,
+#table .tabulator-tableholder::-webkit-scrollbar-thumb:active {
+  background-color: rgba(22,26,72,.5);
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============================================================ -->
+  <!-- Header                                                       -->
+  <!-- ============================================================ -->
+  <header class="app-header">
+    <img class="brand-logo" src="assets/inman-market-view-logo.png"
+         alt="Inman Market View" width="187" height="46">
+    <h1>Local Housing Dashboard</h1>
+    <button class="icon-btn" id="fullscreen-btn" type="button"
+            title="Enter full screen" aria-label="Enter full screen">
+      <!-- Single icon: its path is swapped in initFullscreen()'s sync() so the
+           button always shows ONLY the action it will perform next — the
+           "expand" glyph while windowed, the "contract" glyph while fullscreen. -->
+      <svg id="fs-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path id="fs-icon-path" d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- Main view (national strip + map + table + chart)            -->
+  <!-- ============================================================ -->
+  <div class="view-main">
+
+  <!-- ============================================================ -->
+  <!-- Controls                                                     -->
+  <!-- ============================================================ -->
+  <section class="controls">
+    <div class="control-group">
+      <label for="metric-select">Metric</label>
+      <select id="metric-select"></select>
+    </div>
+    <div class="control-group">
+      <label for="period-select">View</label>
+      <select id="period-select">
+        <option value="value_3m">Level</option>
+        <option value="yoy_change" selected>Year-over-year change</option>
+        <option value="vs_baseline_pct">vs. 2017–19 baseline</option>
+      </select>
+    </div>
+    <div class="control-group control-group--metro">
+      <label for="metro-select">Jump to market</label>
+      <select id="metro-select"></select>
+    </div>
+    <!-- Fullscreen toggle mirrored into the sticky filter bar; revealed by
+         initFullscreen() only while the masthead button is scrolled out of
+         view, so a fullscreen control is always reachable. Right-aligned via
+         margin-left:auto. -->
+    <button class="icon-btn-bar" id="fullscreen-btn-bar" type="button" hidden
+            title="Enter full screen" aria-label="Enter full screen">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path id="fs-icon-path-bar" d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/>
+      </svg>
+    </button>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Main view: map + table                                       -->
+  <!-- ============================================================ -->
+  <section class="main">
+    <div class="panel panel--map">
+      <div class="panel-head">
+        <span class="panel-kicker">Market map</span>
+        <span class="panel-hint">Click any market to drill in</span>
+      </div>
+      <div class="map-wrap">
+      <div id="map"></div>
+      <div class="zip-hint" id="zip-hint" hidden>Select a market for local detail</div>
+      <button class="map-return" id="map-return" type="button" hidden>
+        <span aria-hidden="true">←</span> Return to national view
+      </button>
+      <!-- Selected-metric card (regional/non-ZIP mode) + the SVG leader line that
+           connects it to the nearest border of the selected polygon. Both are
+           .map-wrap children, so they paint above the basemap labels. -->
+      <svg class="map-leader" id="map-leader" hidden></svg>
+      <div class="map-metric-card" id="map-metric-card" hidden></div>
+      <div class="map-legend" id="map-legend"></div>
+      <div class="loading" id="map-loading">Loading map…</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <!-- National state: sortable metro table -->
+      <div id="table-panel">
+        <div class="table-header" id="table-header">CBSAs by selected metric</div>
+        <div class="table-scroll"><div id="table"></div></div>
+      </div>
+      <!-- Metro-selected state: detail panel swaps in place of the table -->
+      <div id="metro-panel" hidden>
+        <button class="btn-return" id="metro-back" type="button">
+          <span aria-hidden="true">←</span> All markets
+        </button>
+        <h2 id="metro-title">—</h2>
+        <div class="subtitle" id="metro-subtitle">—</div>
+        <!-- Selected metric's card renders here (first), then the annual
+             baseline, then the remaining metric cards in default order. -->
+        <div id="metro-metrics"></div>
+        <div class="acs-panel" id="metro-acs"></div>
+        <div id="metro-metrics-rest"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Chart panel                                                  -->
+  <!-- ============================================================ -->
+  <section class="chart-panel">
+    <div class="chart-panel-header">
+      <h2 id="chart-title">Time series</h2>
+      <div class="chart-header-right">
+        <span class="meta" id="chart-meta">Pick markets below to compare against the national reference line</span>
+        <button class="btn-chart-reset" id="chart-reset" type="button"
+                title="Reset the time window to 2019 through the latest data">Reset to 2019–present</button>
+      </div>
+    </div>
+    <div class="chart-body">
+    <div class="chart-controls">
+      <div class="chart-controls-head">
+        <label for="chart-cbsa-select">Compare markets (up to 5)</label>
+        <button class="btn-chart-clear" id="chart-clear" type="button"
+                title="Remove all selected markets from the chart" hidden>Clear</button>
+      </div>
+      <select id="chart-cbsa-select" multiple></select>
+    </div>
+    <div id="chart"></div>
+    </div>
+  </section>
+
+  </div><!-- /.view-main -->
+
+  <!-- ============================================================ -->
+  <!-- Footer                                                       -->
+  <!-- ============================================================ -->
+  <footer class="app-footer" id="app-footer">
+    <span class="footer-credit">Source: FRED (BLS, Census Bureau), Zillow, Redfin Data Center,
+    Realtor.com, Census ACS 5-year | Visualized by Inman with Claude.<span id="footer-asof"></span></span>
+    <span class="footer-method">Count metrics are shown per 1,000 households (fixed ACS 2019–2023 base)
+    on the map and table for cross-metro comparison; the time chart's Level view shows raw counts.
+    Year-over-year and vs-2017–19 are denominator-independent.</span>
+  </footer>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- Scripts                                                      -->
+<!-- ============================================================ -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/topojson-client@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js@11.2.3/public/assets/scripts/choices.min.js"></script>
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<!-- PREVIEW-ONLY data fallback. Inert in production (real data loads first). -->
+<script src="preview-mock.js"></script>
+
+<script>
+/* ============================================================================
+   Inman Local Housing Dashboard — application logic
+   ============================================================================ */
+
+// -------- config -----------------------------------------------------------
+
+const DATA_BASE_URL = "../dashboard_data/";
+
+// Metric registry: defines display label, format, period support, and the
+// color-scale family (sequential or diverging).
+const METRICS = {
+  unemployment_rate: {
+    label: "Unemployment rate",
+    unit: "%",
+    rate: true,                 // rates: comparability stores ppt directly (no /100)
+    format_value: v => (v == null ? "—" : v.toFixed(1) + "%"),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(digits) + " ppt"),
+  },
+  nonfarm_employment: {
+    label: "Nonfarm jobs",
+    unit: "jobs per 1,000 households",
+    rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 0 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  permits_1unit: {
+    label: "Single-family permits",
+    unit: "permits per 1,000 households",
+    rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  permits_total: {
+    label: "Total residential permits",
+    unit: "permits per 1,000 households",
+    rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  zhvi: {
+    label: "Zillow Home Value Index", source: "Zillow", zipDrilldown: true,
+    unit: "$",
+    rate: false,
+    format_value: v => (v == null ? "—" : "$" + Math.round(v).toLocaleString()),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  zori: {
+    label: "Zillow Observed Rent Index", source: "Zillow", zipDrilldown: true,
+    unit: "$/mo",
+    rate: false,
+    format_value: v => (v == null ? "—" : "$" + Math.round(v).toLocaleString()),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  // ---- Zillow market-activity metrics (metro + U.S.; CBSA-only, no ZIP) ----
+  zillow_sales_count: {
+    label: "Sales count (Zillow nowcast)", source: "Zillow",
+    unit: "per 1,000 households", rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  zillow_for_sale_inventory: {
+    label: "For-sale inventory", source: "Zillow",
+    unit: "per 1,000 households", rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  zillow_transaction_value: {
+    // Raw $ aggregate (Houston's call): Level reflects metro size; cross-metro
+    // reading via YoY / vs-2017-19. Compact $ formatting (K/M/B) keeps the big
+    // sums legible in the table, panel, and tooltip.
+    label: "Total transaction value", source: "Zillow",
+    unit: "$", rate: false,
+    format_value: v => {
+      if (v == null || !isFinite(v)) return "—";
+      const a = Math.abs(v);
+      if (a >= 1e9) return "$" + (v / 1e9).toFixed(1) + "B";
+      if (a >= 1e6) return "$" + (v / 1e6).toFixed(1) + "M";
+      if (a >= 1e3) return "$" + Math.round(v / 1e3) + "K";
+      return "$" + Math.round(v).toLocaleString();
+    },
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  zillow_sales_per_listing: {
+    // Turnover ratio = Sales count ÷ For-sale inventory (mirrors the retired
+    // Realtor outflow-per-active). A ratio, so not per-1k normalized.
+    label: "Sales per active listing", source: "Zillow",
+    unit: "ratio", rate: false,
+    format_value: v => (v == null ? "—" : v.toFixed(2)),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  redfin_median_sale_price: {
+    label: "Median sale price (Redfin)",
+    unit: "$",
+    rate: false,
+    format_value: v => (v == null ? "—" : "$" + Math.round(v).toLocaleString()),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  redfin_homes_sold: {
+    label: "Homes sold (Redfin)",
+    unit: "sales per 1,000 households",
+    rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 2 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  redfin_months_supply: {
+    label: "Months of supply (Redfin)",
+    unit: "months",
+    rate: true,                 // ppt-like difference stored directly
+    format_value: v => (v == null ? "—" : v.toFixed(1) + " mo"),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(digits) + " mo"),
+  },
+  // ---- Realtor.com listings metrics (ZIP drilldown, like Zillow ZHVI/ZORI) ----
+  realtor_list_price: {
+    label: "List price", source: "Realtor.com", zipDrilldown: true,
+    unit: "$", rate: false,
+    format_value: v => (v == null ? "—" : "$" + Math.round(v).toLocaleString()),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  realtor_active_listings: {
+    label: "Active listings", source: "Realtor.com", zipDrilldown: true,
+    unit: "per 1,000 households", rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 1 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  realtor_new_listings: {
+    label: "New listings", source: "Realtor.com", zipDrilldown: true,
+    unit: "per 1,000 households", rate: false,
+    format_value: v => (v == null ? "—" : v.toLocaleString(undefined, { maximumFractionDigits: 1 })),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+  realtor_days_on_market: {
+    label: "Days on market", source: "Realtor.com", zipDrilldown: true,
+    unit: "days", rate: false,
+    format_value: v => (v == null ? "—" : Math.round(v) + " d"),
+    format_change_pct: (v, digits = 1) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(digits) + "%"),
+  },
+};
+
+// Metric picker grouping (optgroups). Order = display order.
+const METRIC_GROUPS = [
+  { label: "Home values & rents — Zillow (ZIP drilldown)",
+    metrics: ["zhvi", "zori"] },
+  { label: "Market activity — Zillow",
+    metrics: ["zillow_sales_count", "zillow_for_sale_inventory",
+              "zillow_sales_per_listing", "zillow_transaction_value"] },
+  { label: "Listings & local market — Realtor.com (ZIP drilldown)",
+    metrics: ["realtor_list_price", "realtor_active_listings", "realtor_new_listings",
+              "realtor_days_on_market"] },
+  { label: "Sales & inventory — Redfin",
+    metrics: ["redfin_median_sale_price", "redfin_homes_sold", "redfin_months_supply"] },
+  { label: "Labor & construction — FRED",
+    metrics: ["unemployment_rate", "nonfarm_employment", "permits_1unit", "permits_total"] },
+];
+
+const PERIOD_LABELS = {
+  value_3m:        "Level",
+  yoy_change:      "Year-over-year change",
+  vs_baseline_pct: "vs. 2017–19 baseline",
+};
+
+// Metric-aware period label — the user-facing description of what's actually
+// being computed for the selected (metric × period). Generic dropdown text
+// stays in PERIOD_LABELS; this function carries the per-metric methodology
+// nuance into the legend and chart title where it matters.
+function getPeriodLabel(metric, period) {
+  // Zillow for-sale inventory + the derived sales-per-listing begin in 2018, so
+  // their baseline window is 2018-19, not 2017-19 — label it honestly in the
+  // legend and chart title (the metric dropdown stays generic for all metrics).
+  if (period === "vs_baseline_pct" &&
+      (metric === "zillow_for_sale_inventory" || metric === "zillow_sales_per_listing")) {
+    return "vs. 2018–19 baseline";
+  }
+  if (period !== "value_3m") return PERIOD_LABELS[period];
+  // Level view — strategy varies by metric.
+  if (metric === "zhvi" || metric === "zori") {
+    return "Latest month (smoothed by Zillow)";
+  }
+  if (metric === "redfin_median_sale_price") {
+    return "3-month average, volume-weighted by homes sold";
+  }
+  if (metric === "redfin_months_supply") {
+    return "3-month pooled (inventory ÷ sales)";
+  }
+  if (metric === "realtor_list_price") {
+    return "3-month average, outflow-weighted (Realtor.com)";
+  }
+  if (metric === "realtor_days_on_market") {
+    return "3-month average, outflow-weighted (Realtor.com)";
+  }
+  if (metric && metric.startsWith("realtor_")) {
+    return "3-month average (Realtor.com)";
+  }
+  return "3-month average";
+}
+
+// Reference's color palettes — sequential (level) and diverging (change).
+const SEQUENTIAL_COLORS = ['#f7fcfd','#e0ecf4','#bfd3e6','#9ebcda','#8c96c6','#8856a7','#810f7c'];
+const DIVERGING_COLORS  = ['#b2182b','#d6604d','#f4a582','#f6f0dd','#92c5de','#4393c3','#2166ac'];
+const NO_DATA_COLOR     = '#cccccc';
+
+// Diverging map coloring: warm = negative, cool = positive — by sign only,
+// regardless of the metric's "good/bad" semantics. This matches the text
+// convention everywhere else in the dashboard (positive=green, negative=red)
+// so a reader doesn't have to mentally translate between two color systems.
+// Context (article copy, headline) carries the interpretive weight for
+// whether rising unemployment or falling permits is concerning.
+const DIVERGING_FLIPPED = new Set();
+
+// Count metrics scale with metro size and aren't comparable as raw values
+// across CBSAs. For these, we substitute the per-1k-household normalized
+// versions in both the "level" and "yoy" projections so a small metro and
+// a large metro can sit on the same color scale.
+const COUNT_METRICS = new Set([
+  "permits_1unit",
+  "permits_total",
+  "nonfarm_employment",
+  "redfin_homes_sold",
+  "realtor_active_listings",
+  "realtor_new_listings",
+  "zillow_sales_count",
+  "zillow_for_sale_inventory",
+  // NOT zillow_transaction_value (raw $ aggregate) or zillow_sales_per_listing (ratio).
+]);
+
+// Set of ZIP-drilldown-capable metrics, derived from the registry flag.
+const ZIP_METRICS = new Set(
+  Object.keys(METRICS).filter(k => METRICS[k].zipDrilldown)
+);
+
+// -------- state ------------------------------------------------------------
+
+const state = {
+  manifest:        null,
+  summary:         null,            // { cbsa_code: { metric: {...} } }
+  topojson:        null,
+  acsBaseline:     null,            // array of rows
+  acsByCbsa:       new Map(),
+  nationalReference: null,          // metric -> [{month, value, value_3m, ...}, ...]
+  cbsaLookup:      new Map(),       // cbsa_code -> { name, type, hh, ... }
+  selectedMetric:  "zillow_sales_count",   // default view on the bare URL
+  selectedPeriod:  "yoy_change",
+  selectedCbsa:    null,             // metro shown in the inline detail panel
+  focusedCbsa:     null,             // metro auto-plotted on the chart (the selected one)
+  zipActiveCbsa:   null,             // metro currently rendered as a ZIP choropleth
+  zipShardCache:   new Map(),        // cbsa_code -> decoded ZIP FeatureCollection
+  // Chart's comparison selection — distinct from selectedCbsa.
+  // Max 5 metros enforced via the Choices.js multi-select cap.
+  chartSelectedCbsas: [],
+  // Chip codes added as a SELECTION side-effect (map/dropdown/table click), not
+  // hand-picked in the compare box. Removed on returnToNational(); never written
+  // to ?compare=. Lets "Return to national view" undo browse-driven chips while
+  // leaving deliberately-compared metros in place.
+  autoAddedChips: new Set(),
+  _programmaticChip: false,   // true while we mutate the compare box ourselves, so
+                              // the addItem/removeItem handlers can tell a
+                              // programmatic chip from a user-typed one.
+  // Camera-ownership key: "national" | `${cbsa}:region` | `${cbsa}:zip`.
+  // renderMap/renderZipView only move the camera when this key CHANGES, so a
+  // period/metric switch within the SAME mode preserves the user's pan/zoom,
+  // while a mode change (zip↔region↔national) re-routes the camera.
+  _cameraFor: "national",
+  // Time-window for the chart's dataZoom slider. Defaults to Jan 2019 →
+  // latest available; null end means "follow the latest data point." Once
+  // the user drags the slider, both become concrete timestamps and persist
+  // across metric/metro changes within the session.
+  chartZoomStart: null,     // set to DEFAULT_CHART_START at init
+  chartZoomEnd:   null,
+  metricHistoryCache: new Map(),    // metric -> array of {cbsa_code, month, ...}
+  cbsaDetailCache:    new Map(),    // cbsa_code -> array of {metric, month, ...}
+};
+
+// Colors assigned to the chart's selected metros. Six entries: the at-cap
+// policy can plot a 6th line (5 hand-picked chips + the focused metro), and a
+// 5-color cycle would reuse color #1 for that 6th line.
+const CHART_LINE_COLORS = ["#0a84ff", "#ff0a0a", "#16a34a", "#ea580c", "#9333ea", "#0891b2"];
+const CHART_NATIONAL_COLOR = "#161a48";
+
+// -------- color scale logic (ported from explorer-map reference) -----------
+
+function getQuantile(sorted, q) {
+  if (sorted.length === 0) return null;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+function calculateSequentialBreaks(values) {
+  const vs = values.filter(v => v != null && isFinite(v)).sort((a,b) => a - b);
+  if (vs.length === 0) return null;
+  return [0, 1/6, 2/6, 3/6, 4/6, 5/6, 1].map(q => getQuantile(vs, q));
+}
+
+function calculateDivergingBreaks(values) {
+  const vs = values.filter(v => v != null && isFinite(v));
+  if (vs.length === 0) return null;
+  const negatives = vs.filter(v => v < 0).map(v => -v).sort((a,b) => a - b);
+  const positives = vs.filter(v => v > 0).sort((a,b) => a - b);
+  const total = negatives.length + positives.length;
+  if (total === 0) return null;
+  // Pick the dominant tail (>= 2/3 of values).
+  const useTail = (positives.length >= total * 2/3) ? positives
+                : (negatives.length >= total * 2/3) ? negatives
+                : (positives.length >= negatives.length ? positives : negatives);
+  const driving = getQuantile(useTail, 0.85);
+  if (!driving) return null;
+  const extreme         = driving;
+  const nextMostExtreme = driving * (3/5);
+  const moderate        = driving * (1/5);
+  return [-extreme, -nextMostExtreme, -moderate, moderate, nextMostExtreme, extreme];
+}
+
+function getColor(value, scale) {
+  if (value == null || !isFinite(value)) return NO_DATA_COLOR;
+  if (!scale) return NO_DATA_COLOR;
+  const { type, breaks, colors, flipped } = scale;
+  if (type === "sequential") {
+    for (let i = 1; i < breaks.length; i++) {
+      if (value <= breaks[i]) return colors[i - 1];
+    }
+    return colors[colors.length - 1];
+  } else {
+    // Diverging: breaks has 6 entries (negEx, negNext, negMod, posMod, posNext, posEx).
+    const c = colors;
+    const palette = flipped ? [...c].reverse() : c;
+    const [negEx, negNext, negMod, posMod, posNext, posEx] = breaks;
+    if (value < negEx)  return palette[0];
+    if (value < negNext) return palette[1];
+    if (value < negMod) return palette[2];
+    if (value < posMod) return palette[3];
+    if (value < posNext) return palette[4];
+    if (value < posEx)  return palette[5];
+    return palette[6];
+  }
+}
+
+function buildScaleForPeriod(metric, period, values) {
+  if (period === "value_3m") {
+    const breaks = calculateSequentialBreaks(values);
+    return breaks ? { type: "sequential", breaks, colors: SEQUENTIAL_COLORS } : null;
+  } else {
+    const breaks = calculateDivergingBreaks(values);
+    return breaks ? {
+      type:   "diverging",
+      breaks, colors: DIVERGING_COLORS,
+      flipped: DIVERGING_FLIPPED.has(metric)
+    } : null;
+  }
+}
+
+// -------- data loading -----------------------------------------------------
+
+async function loadJson(path) {
+  const res = await fetch(DATA_BASE_URL + path);
+  if (!res.ok) throw new Error(`Fetch failed for ${path}: ${res.status}`);
+  return res.json();
+}
+
+// Defense-in-depth pruning: drop (CBSA × metric) cells whose as_of_month is
+// more than 6 months behind that metric's leading edge. This catches zombie
+// FRED series (e.g., a 2014-12 Salisbury MD unemployment reading) that
+// slip past the orchestrator's discovery filter — usually because they
+// were cached from a prior catalog build. Once the next monthly refresh
+// runs with the R-side observation_end filter, this should be a no-op.
+function pruneStaleSummary(summary, manifest) {
+  if (!manifest?.metrics) return summary;
+  // Per-metric cutoff = leading_edge_month - 6 months. We build a comparable
+  // "YYYY-MM" string so we can do lexicographic comparison.
+  const cutoffs = {};
+  for (const m of manifest.metrics) {
+    if (!m.latest_month) continue;
+    const [y, mo] = m.latest_month.split("-").map(Number);
+    const totalMonths = y * 12 + (mo - 1) - 6;
+    const cy = Math.floor(totalMonths / 12);
+    const cm = (totalMonths % 12) + 1;
+    cutoffs[m.metric] = cy + "-" + String(cm).padStart(2, "0");
+  }
+  let pruned = 0;
+  for (const cbsa of Object.keys(summary)) {
+    for (const metric of Object.keys(summary[cbsa])) {
+      const cell   = summary[cbsa][metric];
+      const cutoff = cutoffs[metric];
+      if (!cutoff) continue;
+      if (cell && cell.as_of_month && cell.as_of_month < cutoff) {
+        delete summary[cbsa][metric];
+        pruned++;
+      }
+    }
+  }
+  if (pruned > 0) {
+    console.log(`Pruned ${pruned} stale (CBSA × metric) cells (>6 months behind leading edge).`);
+  }
+  return summary;
+}
+
+async function loadTopojson() {
+  // Prefer .topojson, fall back to .geojson if rendered without geojsonio.
+  for (const ext of ["topojson", "geojson"]) {
+    const res = await fetch(DATA_BASE_URL + "geo/cbsa." + ext);
+    if (res.ok) return { ext, data: await res.json() };
+  }
+  throw new Error("No CBSA geometry file found (cbsa.topojson or cbsa.geojson)");
+}
+
+async function loadInitialData() {
+  // PREVIEW-ONLY: if the real cube isn't reachable (standalone preview), fall
+  // back to synthetic data so the UI can be reviewed. No-op in production.
+  try {
+    return await loadRealInitialData();
+  } catch (err) {
+    if (window.__INMAN_PREVIEW_MOCK__) {
+      console.warn("Real data unavailable — using preview mock.", err && err.message);
+      await window.__INMAN_PREVIEW_MOCK__.build(state, topojson);
+      return;
+    }
+    throw err;
+  }
+}
+
+async function loadRealInitialData() {
+  const [manifest, summary, geo, acs, natRef, cbsaIndex, acsNational] = await Promise.all([
+    loadJson("manifest.json"),
+    loadJson("summary.json"),
+    loadTopojson(),
+    loadJson("acs/baseline.json"),
+    // The following are optional — older cubes won't have them. Tolerate.
+    loadJson("national/reference.json").catch(() => null),
+    loadJson("cbsa_index.json").catch(() => null),      // household rank + households
+    loadJson("acs/national.json").catch(() => null),    // U.S. baseline benchmark
+  ]);
+  state.manifest          = manifest;
+  state.summary           = pruneStaleSummary(summary, manifest);
+  state.topojson          = geo;
+  state.nationalReference = natRef;   // may be null if cube predates this feature
+  state.acsBaseline       = acs;
+  state.acsNational       = acsNational;   // {measureKey: value} or null
+  acs.forEach(row => state.acsByCbsa.set(row.cbsa_code, row));
+
+  // CBSA lookup: names come from the topojson; household rank + households
+  // are merged in from cbsa_index.json (used for the chart compare-dropdown
+  // ordering and the Top-X rank pools in the drawer).
+  const fc = geo.ext === "topojson"
+    ? topojson.feature(geo.data, Object.values(geo.data.objects)[0])
+    : geo.data;
+  fc.features.forEach(f => {
+    state.cbsaLookup.set(f.properties.cbsa_code, {
+      name: f.properties.cbsa_name,
+    });
+  });
+  if (Array.isArray(cbsaIndex)) {
+    for (const r of cbsaIndex) {
+      const existing = state.cbsaLookup.get(r.cbsa_code) || {};
+      state.cbsaLookup.set(r.cbsa_code, {
+        name: existing.name || r.name,
+        rank: r.rank,
+        households: r.households,
+        has_zip: r.has_zip === true || r.has_zip === "true",
+      });
+    }
+  }
+  state.geoFeatures = fc;
+}
+
+// Whether a metro currently supports ZIP drilldown for the active metric:
+// the metric must be ZIP-capable AND the metro must have a ZIP shard.
+function zipAvailable(cbsaCode, metric) {
+  return ZIP_METRICS.has(metric) && !!state.cbsaLookup.get(cbsaCode)?.has_zip;
+}
+
+// Lazy cache of fetched ZIP shards (one per metro).
+async function loadZipShard(cbsaCode) {
+  if (state.zipShardCache.has(cbsaCode)) return state.zipShardCache.get(cbsaCode);
+  let data = null, ext = null;
+  for (const e of ["topojson", "geojson"]) {
+    const res = await fetch(DATA_BASE_URL + `zip/${cbsaCode}.${e}`);
+    if (res.ok) { data = await res.json(); ext = e; break; }
+  }
+  const fc = (data && ext === "topojson")
+    ? topojson.feature(data, Object.values(data.objects)[0])
+    : data;
+  state.zipShardCache.set(cbsaCode, fc);
+  return fc;
+}
+
+// (Removed loadMetricHistory: the chart loads per-CBSA shards via
+//  loadCbsaDetail; the per-metric metrics/*.json files are no longer generated.)
+
+async function loadCbsaDetail(cbsaCode) {
+  if (state.cbsaDetailCache.has(cbsaCode)) {
+    return state.cbsaDetailCache.get(cbsaCode);
+  }
+  // PREVIEW-ONLY: synthesize the per-CBSA series when running on mock data.
+  if (state._mock && window.__INMAN_PREVIEW_MOCK__) {
+    const mock = window.__INMAN_PREVIEW_MOCK__.detail(cbsaCode);
+    state.cbsaDetailCache.set(cbsaCode, mock);
+    return mock;
+  }
+  const data = await loadJson(`cbsa/${cbsaCode}.json`);
+  state.cbsaDetailCache.set(cbsaCode, data);
+  return data;
+}
+
+// -------- map --------------------------------------------------------------
+
+let map, geoLayer, layersByCbsa = new Map();
+
+function initMap() {
+  map = L.map("map", { attributionControl: false, zoomControl: false })
+    .setView([39.8283, -98.5795], 4);
+  // Zoom control top-right so it doesn't collide with the top-left "Return
+  // to national view" pill / ZIP hint.
+  L.control.zoom({ position: "topright" }).addTo(map);
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd",
+    maxZoom: 12,
+  }).addTo(map);
+
+  // Place-name labels in their own pane: above the choropleth (overlayPane 400)
+  // so names stay readable over the colored polygons, but BELOW the tooltip pane
+  // (650) so hover tooltips read over the labels. (The in-map metric card + legend
+  // are HTML overlays outside the map, so they always paint above the labels.)
+  map.createPane("labels");
+  map.getPane("labels").style.zIndex = 450;
+  map.getPane("labels").style.pointerEvents = "none";
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd",
+    maxZoom: 12,
+    pane: "labels",
+  }).addTo(map);
+
+  // Keep the in-map card's leader line glued to the polygon as the camera moves.
+  map.on("move zoom viewreset zoomend moveend resize", updateMapLeader);
+  // Re-check legend↔card overlap when the map is resized (mobile rotation,
+  // responsive stack, embed iframe resize).
+  map.on("resize", reconcileLegendCard);
+}
+
+function styleFeature(feature, scale) {
+  // Single, metric-specific rule:
+  //   - opaque colored when this CBSA has data for the currently selected
+  //     (metric × period)
+  //   - faded gray when it doesn't
+  // No coverage-tier or partial-toggle interaction — color carries the
+  // value signal; transparency carries the data-presence signal.
+  const cbsa  = feature.properties.cbsa_code;
+  const value = getValueFor(cbsa, state.selectedMetric, state.selectedPeriod);
+  const hasData = value != null && isFinite(value);
+  return {
+    color:       hasData ? "#666" : "#bbb",
+    weight:      1,
+    opacity:     hasData ? 0.6  : 0.3,
+    fillColor:   getColor(value, scale),
+    fillOpacity: hasData ? 0.65 : 0.12,
+  };
+}
+
+function renderMap() {
+  const m = state.selectedMetric, p = state.selectedPeriod;
+  updateZipHint();
+  // In-map selected-metric card (regional/non-ZIP mode only). One call here
+  // covers every trigger: selection, return, metric change, period change, and
+  // the ZIP-fallback re-entry — it shows/hides itself from current state.
+  renderMapMetricCard();
+
+  // ZIP mode: a metro is selected AND the active metric supports ZIP for it.
+  if (state.selectedCbsa && zipAvailable(state.selectedCbsa, m)) {
+    renderZipView(state.selectedCbsa);   // async; clears the national layer
+    return;
+  }
+
+  // National choropleth.
+  clearZipLayer();
+  // Collect values through getValueFor so count metrics use their per-1k-hh
+  // projection (so the color scale matches the table + legend).
+  const values = Object.keys(state.summary)
+    .map(cbsa => getValueFor(cbsa, m, p))
+    .filter(v => v != null && isFinite(v));
+  const scale = buildScaleForPeriod(m, p, values);
+  state.currentScale = scale;
+
+  if (geoLayer) map.removeLayer(geoLayer);
+  layersByCbsa.clear();
+
+  geoLayer = L.geoJSON(state.geoFeatures, {
+    style: f => styleFeature(f, scale),
+    onEachFeature: (feature, layer) => {
+      const cbsa = feature.properties.cbsa_code;
+      layersByCbsa.set(cbsa, layer);
+      layer.on({
+        mouseover: e => {
+          e.target.setStyle({ weight: 2.5, color: "#333", opacity: 1 });
+          e.target.bringToFront();
+        },
+        mouseout: () => { if (cbsa !== state.selectedCbsa) geoLayer.resetStyle(layer); },
+        click:    () => selectCbsa(cbsa),
+      });
+      const value = getValueFor(cbsa, m, p);
+      const tip = `<strong>${feature.properties.cbsa_name}</strong><br>` +
+                  `${METRICS[m].label}: ${formatForPeriod(m, p, value)}`;
+      layer.bindTooltip(tip, { sticky: true });
+    }
+  }).addTo(map);
+
+  renderLegend(scale);
+
+  // Selected (non-ZIP) metro: highlight in place AND zoom to regional context.
+  // (renderMap re-routes ZIP-capable selections to renderZipView before this
+  // point, so reaching here means the camera should sit at the regional view —
+  // this is also what fixes the stale camera when switching to a non-ZIP metric
+  // while previously zoomed into a ZIP drilldown.)
+  if (state.selectedCbsa) {
+    highlightMetro(state.selectedCbsa);
+    zoomToMetroRegion(state.selectedCbsa);
+  }
+}
+
+// Prominent border on the selected metro when ZIP drilldown isn't available.
+// Black (matching the hover color) so the selected outline is consistent across
+// every selection path — map click, dropdown, or table row — and doesn't flip
+// blue↔black depending on whether the cursor has passed over it (the hover style
+// is #333 and mouseout intentionally doesn't reset the selected polygon). Heavier
+// weight (3.5 vs the hover's 2.5) keeps the selection distinct from a plain hover.
+function highlightMetro(cbsaCode) {
+  const layer = layersByCbsa.get(cbsaCode);
+  if (layer) {
+    layer.setStyle({ weight: 3.5, color: "#333", opacity: 1 });
+    layer.bringToFront();
+  }
+}
+
+// Zoom to the selected metro with regional context (its neighbors stay visible)
+// so a non-ZIP selection gives clear "where is it + how does it compare to its
+// surroundings" feedback. The camera-ownership key prevents re-fitting on every
+// period/metric change within the same mode — the user's manual pan/zoom
+// survives; only a mode change (region↔zip↔national) or a different metro re-fits.
+function zoomToMetroRegion(cbsaCode) {
+  const key = cbsaCode + ":region";
+  if (state._cameraFor === key) return;
+  const layer = layersByCbsa.get(cbsaCode);   // populated in renderMap's onEachFeature
+  if (!layer) return;
+  // pad(1.6) expands the metro's bounds ~1.6× on each side (metro + a ring of
+  // neighbors); maxZoom 7 keeps a small metro from filling the whole frame.
+  try { map.fitBounds(layer.getBounds().pad(1.6), { maxZoom: 7 }); } catch (e) {}
+  state._cameraFor = key;
+}
+
+function clearZipLayer() {
+  if (state.zipLayer) { map.removeLayer(state.zipLayer); state.zipLayer = null; }
+  state.zipActiveCbsa = null;
+}
+
+function updateZipHint() {
+  // The "Return to national view" pill and the prompt hint share the map's
+  // top-left corner and are mutually exclusive: the pill shows whenever a metro
+  // is selected; the hint shows at the national view for ANY metric (so there's
+  // always a cue to drill in), with copy that reflects whether the active metric
+  // also offers ZIP-level detail.
+  const ret = document.getElementById("map-return");
+  if (ret) ret.hidden = !state.selectedCbsa;
+  const hint = document.getElementById("zip-hint");
+  if (!hint) return;
+  hint.hidden = !!state.selectedCbsa;
+  hint.textContent = ZIP_METRICS.has(state.selectedMetric)
+    ? "Select a market for ZIP-level detail"
+    : "Select a market for local detail";
+}
+
+// In-map selected-metric card — shown ONLY in regional (non-ZIP) mode. It's an
+// HTML overlay pinned to a free corner of the map (bottom-left), sized to fit
+// within the map with margin so it never covers the polygon, and connected to
+// the metro by an SVG leader line (updateMapLeader) that points at the NEAREST
+// polygon border — so the whole selected polygon stays visible. Because the card
+// is a .map-wrap child it paints above ALL of the map's content (place-name
+// labels included). Hidden in ZIP-drilldown mode and at the national view.
+function renderMapMetricCard() {
+  const card = document.getElementById("map-metric-card");
+  const svg  = document.getElementById("map-leader");
+  if (!card) return;
+  const show = state.selectedCbsa && !zipAvailable(state.selectedCbsa, state.selectedMetric);
+  if (!show) {
+    card.hidden = true; card.innerHTML = "";
+    if (svg) { svg.hidden = true; svg.innerHTML = ""; }
+    state._leaderPts = null; state._leaderFor = null;
+    return;
+  }
+  const name = state.cbsaLookup.get(state.selectedCbsa)?.name || state.selectedCbsa;
+  card.innerHTML = `<div class="mmc-market">${name}</div>` +
+                   metricCardHTML(state.selectedCbsa, state.selectedMetric, true);
+  card.hidden = false;
+  cacheLeaderBoundary(state.selectedCbsa);   // downsampled boundary for the leader
+  updateMapLeader();
+}
+
+// Cache a downsampled boundary (<=240 [lat,lng] points) of the selected polygon,
+// recomputed only when the selected metro changes; used by updateMapLeader to
+// find the nearest border point (re-projected cheaply on every map move).
+function cacheLeaderBoundary(cbsaCode) {
+  if (state._leaderFor === cbsaCode && state._leaderPts) return;
+  const layer = layersByCbsa.get(cbsaCode);
+  const geom = layer && layer.feature && layer.feature.geometry;
+  const pts = [];
+  if (geom) {
+    const rings = geom.type === "Polygon" ? geom.coordinates
+                : geom.type === "MultiPolygon" ? geom.coordinates.flat()
+                : [];
+    for (const ring of rings) for (const c of ring) pts.push([c[1], c[0]]); // [lat,lng]
+  }
+  const MAX = 240;
+  state._leaderPts = (pts.length > MAX)
+    ? pts.filter((_, i) => i % Math.ceil(pts.length / MAX) === 0)
+    : pts;
+  state._leaderFor = cbsaCode;
+}
+
+// Draw/refresh the leader line from the card's edge (facing the metro) to the
+// nearest polygon-border point, in map-container pixels. Called on render and on
+// every map move/zoom/resize so the line stays glued as the camera changes.
+function updateMapLeader() {
+  const card = document.getElementById("map-metric-card");
+  const svg  = document.getElementById("map-leader");
+  if (!svg) return;
+  if (!card || card.hidden || !state._leaderPts || !state._leaderPts.length) {
+    svg.hidden = true; svg.innerHTML = ""; return;
+  }
+  const wrap = document.querySelector(".map-wrap");
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const wr = wrap.getBoundingClientRect(), cr = card.getBoundingClientRect();
+  const cardCx = cr.left - wr.left + cr.width / 2;
+  const cardCy = cr.top  - wr.top  + cr.height / 2;
+  // nearest boundary point (container px) to the card center
+  let best = null, bestD = Infinity;
+  for (const [lat, lng] of state._leaderPts) {
+    const p = map.latLngToContainerPoint([lat, lng]);
+    const d = (p.x - cardCx) ** 2 + (p.y - cardCy) ** 2;
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  if (!best) { svg.hidden = true; svg.innerHTML = ""; return; }
+  // start the line at the card border facing the polygon (not the card center)
+  const a = rectBorderToward(cardCx, cardCy, cr.width / 2, cr.height / 2, best.x, best.y);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.innerHTML =
+    `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${best.x.toFixed(1)}" y2="${best.y.toFixed(1)}"/>` +
+    `<circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="2.5"/>` +
+    `<circle class="leader-tip" cx="${best.x.toFixed(1)}" cy="${best.y.toFixed(1)}" r="3.5"/>`;
+  svg.hidden = false;
+}
+
+// Point where the ray from a rect's center toward (tx,ty) exits the rect border.
+function rectBorderToward(cx, cy, halfW, halfH, tx, ty) {
+  const dx = tx - cx, dy = ty - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const sx = dx !== 0 ? halfW / Math.abs(dx) : Infinity;
+  const sy = dy !== 0 ? halfH / Math.abs(dy) : Infinity;
+  const s = Math.min(sx, sy);
+  return { x: cx + dx * s, y: cy + dy * s };
+}
+
+// Which ZIP-shard property holds the value for a (metric, period).
+function zipValueField(metric, period) {
+  if (period === "yoy_change")      return metric + "_yoy";
+  if (period === "vs_baseline_pct") return metric + "_base";
+  return metric;                    // value_3m
+}
+function zipValue(feature, metric, period) {
+  const v = feature.properties ? feature.properties[zipValueField(metric, period)] : null;
+  return (v == null || !isFinite(v)) ? null : v;
+}
+
+async function renderZipView(cbsaCode) {
+  const m = state.selectedMetric, p = state.selectedPeriod;
+  if (geoLayer) { map.removeLayer(geoLayer); geoLayer = null; }
+  clearZipLayer();
+
+  const fc = await loadZipShard(cbsaCode);
+  if (!fc || !fc.features || fc.features.length === 0) {
+    // Shard missing/empty after all — fall back to national + highlight.
+    const info = state.cbsaLookup.get(cbsaCode);
+    if (info) info.has_zip = false;     // don't try again this session
+    renderMap();
+    return;
+  }
+
+  const vals = fc.features.map(ft => zipValue(ft, m, p)).filter(v => v != null && isFinite(v));
+  const scale = buildScaleForPeriod(m, p, vals);
+  state.currentScale = scale;
+
+  state.zipLayer = L.geoJSON(fc, {
+    style: ft => {
+      const v = zipValue(ft, m, p);
+      const hasData = v != null && isFinite(v);
+      // weight:1 (a whole CSS pixel) renders crisply; the previous 0.8 was
+      // sub-pixel, so on HiDPI screens it anti-aliased into a faint, fuzzy
+      // edge. Matches the CBSA layer + the explorer-map's ZIP styling.
+      return { color: hasData ? "#666" : "#bbb", weight: 1,
+               opacity: hasData ? 0.7 : 0.35, lineCap: "round", lineJoin: "round",
+               fillColor: getColor(v, scale), fillOpacity: hasData ? 0.7 : 0.12 };
+    },
+    onEachFeature: (ft, layer) => {
+      const v = zipValue(ft, m, p);
+      layer.on({
+        mouseover: e => { e.target.setStyle({ weight: 2, color: "#333", opacity: 1 }); e.target.bringToFront(); },
+        mouseout:  e => { state.zipLayer && state.zipLayer.resetStyle(e.target); },
+      });
+      layer.bindTooltip(
+        `<strong>ZIP ${ft.properties.zip || ft.properties.postal_code || ""}</strong><br>` +
+        `${METRICS[m].label}: ${formatForPeriod(m, p, v)}`, { sticky: true });
+    }
+  }).addTo(map);
+  state.zipActiveCbsa = cbsaCode;
+  // Same camera-ownership guard as the regional path: fit once per (metro × ZIP
+  // mode), so changing the period inside a ZIP drilldown stops snapping the
+  // camera back; selecting a different metro or flipping zip↔region re-fits.
+  const camKey = cbsaCode + ":zip";
+  if (state._cameraFor !== camKey) {
+    try { map.fitBounds(state.zipLayer.getBounds(), { padding: [14, 14] }); } catch (e) {}
+    state._cameraFor = camKey;
+  }
+  renderLegend(scale);
+}
+
+function renderLegend(scale) {
+  const el = document.getElementById("map-legend");
+  if (!scale) {
+    // No colorable values for the current metric + view. The most common cause
+    // is the vs-2017-19 baseline being unavailable for a metric whose history
+    // doesn't span the 2017-19 window (e.g. Zillow for-sale inventory + the
+    // derived sales-per-listing both begin in 2018), which the coverage guard
+    // correctly leaves null rather than comparing against a partial baseline.
+    const m = state.selectedMetric, p = state.selectedPeriod;
+    const label = (METRICS[m] && METRICS[m].label) || "this metric";
+    const view  = (PERIOD_LABELS[p] || "this view").toLowerCase();
+    el.innerHTML =
+      `<div class="title">${label}</div>` +
+      `<div style="color:var(--text-muted);font-size:11px;">` +
+      `No “${view}” data available for this metric.` +
+      (p === "vs_baseline_pct"
+        ? ` Its history doesn’t cover enough of the 2017–19 baseline.`
+        : ``) +
+      `</div>`;
+    reconcileLegendCard();
+    return;
+  }
+  const m = state.selectedMetric, p = state.selectedPeriod;
+  const palette = scale.type === "diverging"
+    ? (scale.flipped ? [...scale.colors].reverse() : scale.colors)
+    : scale.colors;
+
+  // Count metrics on the Level view: the NATIONAL map shows the per-1,000-
+  // household figure, but the ZIP-level map shows RAW counts (ZIP shards carry
+  // no household denominator). Label the subtitle to match the active view so
+  // the numbers and the unit agree.
+  const perHHnote = (COUNT_METRICS.has(m) && p === "value_3m")
+    ? (state.zipActiveCbsa ? " · raw counts" : " · per 1,000 households")
+    : "";
+  let html = `<div class="title">${METRICS[m].label}</div>`;
+  html += `<div style="color:var(--text-muted);font-size:11px;">${getPeriodLabel(m, p)}${perHHnote}</div>`;
+  html += `<div class="scale">${palette.map(c =>
+    `<div class="bin" style="background:${c}"></div>`).join("")}</div>`;
+  // Range labels
+  let lo, hi;
+  if (scale.type === "sequential") {
+    lo = scale.breaks[0]; hi = scale.breaks[scale.breaks.length - 1];
+  } else {
+    lo = scale.breaks[0]; hi = scale.breaks[scale.breaks.length - 1];
+  }
+  html += `<div class="scale-labels"><span>${formatScale(m, p, lo)}</span>` +
+          `<span>${formatScale(m, p, hi)}</span></div>`;
+  html += `<div class="row" style="margin-top:6px;">` +
+          `<span class="swatch" style="background:${NO_DATA_COLOR}"></span>` +
+          `<span style="color:var(--text-muted)">No data</span></div>`;
+  el.innerHTML = html;
+  reconcileLegendCard();
+}
+
+// Drop the legend when it would overlap the in-map selected-market card, and
+// restore it the moment they no longer collide. Rationale: in single-market
+// (non-ZIP) view the card already shows that market's numbers, so the color
+// scale is non-essential there — but it stays whenever there's room, and is
+// always kept in the national + ZIP views (where the card is hidden). The
+// overlap is what matters on narrow / mobile maps where the bottom-left card and
+// bottom-right legend would otherwise sit on top of each other.
+function reconcileLegendCard() {
+  const legend = document.getElementById("map-legend");
+  const card   = document.getElementById("map-metric-card");
+  if (!legend) return;
+  legend.style.display = "";                 // restore first so we can measure it
+  if (!card || card.hidden) return;          // national / ZIP view → always keep legend
+  const lr = legend.getBoundingClientRect();
+  const cr = card.getBoundingClientRect();
+  const overlap = !(cr.right <= lr.left || cr.left >= lr.right ||
+                    cr.bottom <= lr.top  || cr.top  >= lr.bottom);
+  if (overlap) legend.style.display = "none";
+}
+
+// -------- table ------------------------------------------------------------
+
+let table;
+
+function buildTableRows() {
+  const m = state.selectedMetric, p = state.selectedPeriod;
+  const rows = [];
+  // Table aligns with the map: any CBSA that has data for the selected
+  // metric appears; everything else is filtered out. (The old per-tier
+  // coverage filter was removed once the map's alpha rule became
+  // metric-specific.)
+  for (const [cbsa, byMetric] of Object.entries(state.summary)) {
+    const info = byMetric?.[m];
+    if (!info) continue;
+    const v = getValueFor(cbsa, m, p);
+    if (v == null || !isFinite(v)) continue;   // omit markets with no value for this metric (no "—" rows)
+    rows.push({
+      cbsa_code: cbsa,
+      cbsa_name: state.cbsaLookup.get(cbsa)?.name || cbsa,
+      value: v,
+      raw_level: info.value_3m,
+      yoy: info.yoy_change,
+      as_of: info.as_of_month,
+    });
+  }
+  return rows;
+}
+
+function initTable() {
+  // Pass initial data via `data:` so Tabulator has rows when its internal
+  // DOM is built — avoids the "element is null" race that fires when
+  // setData/redraw are called too early in the lifecycle.
+  table = new Tabulator("#table", {
+    layout: "fitColumns",
+    height: "100%",
+    data: buildTableRows(),
+    placeholder: "No markets have data for this view",
+    initialSort: [{ column: "value", dir: "desc" }],
+    columns: [
+      { title: "Market", field: "cbsa_name", widthGrow: 2, headerSort: true },
+      { title: "Value", field: "value", hozAlign: "right",
+        formatter: cell => {
+          const m = state.selectedMetric, p = state.selectedPeriod;
+          return formatForPeriod(m, p, cell.getValue());
+        },
+        sorter: "number",
+      },
+      { title: "As of", field: "as_of", hozAlign: "right", width: 96,
+        formatter: cell => fmtMonth(cell.getValue()) },
+    ],
+  });
+  // Row click → select that metro (same as a map click). Tabulator 5.x ignores
+  // the v4-style `rowClick:` constructor option, so the row click was dead until
+  // wired through the 5.x event API here.
+  table.on("rowClick", (e, row) => selectCbsa(row.getData().cbsa_code));
+}
+
+function refreshTable() {
+  if (!table) return;
+  // Reflect the active metric + per-1k note in the table header.
+  const hdr = document.getElementById("table-header");
+  if (hdr) {
+    const m = state.selectedMetric, p = state.selectedPeriod;
+    const perHH = (COUNT_METRICS.has(m) && p === "value_3m") ? " · per 1,000 households" : "";
+    hdr.textContent = `${METRICS[m].label} — ${getPeriodLabel(m, p)}${perHH}`;
+  }
+  // setData triggers a re-render on its own; no explicit redraw needed.
+  table.setData(buildTableRows());
+}
+
+// -------- chart ------------------------------------------------------------
+
+let chart;
+let chartChoices;            // Choices.js instance for the multi-select
+let chartRenderSeq = 0;      // guards against stale async renderChart() races (see renderChart)
+const CHART_MAX_METROS = 5;
+// Literal font stack for ECharts canvas text — CSS variables do NOT resolve
+// inside the canvas renderer, so we pass an explicit string. Mirrors --font-ui.
+const CHART_FONT = 'Libre Franklin, "Helvetica Neue", Arial, sans-serif';
+// Default left edge of the chart time window: January 2019 (mid-month to
+// match the data's "YYYY-MM-15" convention).
+const DEFAULT_CHART_START = Date.parse("2019-01-15");
+
+function initChart() {
+  chart = echarts.init(document.getElementById("chart"));
+  window.addEventListener("resize", () => chart.resize());
+  // Capture the user's slider window (as concrete timestamps) so it persists
+  // across metric/metro changes. Guarded against the programmatic setOption
+  // in renderChart so we don't overwrite intent with our own default.
+  chart.on("dataZoom", e => {
+    if (state._applyingZoom || !state._chartExtent) return;
+    let s, en;
+    if (e.batch && e.batch[0]) { s = e.batch[0].start; en = e.batch[0].end; }
+    else { s = e.start; en = e.end; }
+    if (s == null || en == null) return;
+    const { min, max } = state._chartExtent;
+    state.chartZoomStart = min + (max - min) * (s / 100);
+    state.chartZoomEnd   = min + (max - min) * (en / 100);
+  });
+  // Web fonts load asynchronously; once ready, re-render so axis/legend text
+  // picks up Libre Franklin instead of the fallback it rendered with first.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => { if (chart) renderChart(); });
+  }
+}
+
+function initChartControls() {
+  const sel = document.getElementById("chart-cbsa-select");
+  // Populate ordered by household rank (largest metros first) so the most
+  // likely comparisons sit at the top of the list; metros without a rank
+  // fall to the bottom, alphabetically.
+  const opts = [];
+  for (const [code, info] of state.cbsaLookup) {
+    opts.push({ value: code, label: info.name || code, rank: info.rank });
+  }
+  opts.sort((a, b) => {
+    if (a.rank != null && b.rank != null) return a.rank - b.rank;
+    if (a.rank != null) return -1;
+    if (b.rank != null) return 1;
+    return a.label.localeCompare(b.label);
+  });
+  opts.forEach(o => {
+    const el = document.createElement("option");
+    el.value = o.value; el.textContent = o.label;
+    sel.appendChild(el);
+  });
+
+  chartChoices = new Choices(sel, {
+    removeItemButton: true,
+    maxItemCount: CHART_MAX_METROS,
+    maxItemText: maxItemCount => `You can only add ${maxItemCount} markets. Remove one to swap.`,
+    searchEnabled: true,
+    searchResultLimit: 20,
+    shouldSort: false,
+    placeholder: true,
+    placeholderValue: "Type a market name…",
+    itemSelectText: "",
+  });
+
+  // Restore from URL if present.
+  if (state.chartSelectedCbsas.length > 0) {
+    chartChoices.setChoiceByValue(state.chartSelectedCbsas);
+  }
+
+  // "Clear" button: only shown when there's at least one selected metro.
+  const clearBtn = document.getElementById("chart-clear");
+  const updateClearBtn = () => { if (clearBtn) clearBtn.hidden = state.chartSelectedCbsas.length === 0 && !state.focusedCbsa; };
+  updateClearBtn();
+
+  sel.addEventListener("addItem", e => {
+    const code = e.detail.value;
+    if (!state.chartSelectedCbsas.includes(code)) {
+      state.chartSelectedCbsas.push(code);
+      // Ownership: a chip added while _programmaticChip is set is a selection
+      // side-effect (auto, removable by Return-to-national); a chip the user
+      // typed in is hand-owned. (Choices won't re-fire addItem for an
+      // already-selected choice, so an auto chip becomes hand-owned only when
+      // the user removes it and re-adds it — the one "interaction" the box offers.)
+      if (state._programmaticChip) state.autoAddedChips.add(code);
+      else state.autoAddedChips.delete(code);
+      updateURL();
+      renderChart();
+    }
+    updateClearBtn();
+  });
+  sel.addEventListener("removeItem", e => {
+    state.chartSelectedCbsas = state.chartSelectedCbsas.filter(c => c !== e.detail.value);
+    state.autoAddedChips.delete(e.detail.value);   // removed chip needs no undo bookkeeping
+    updateURL();
+    renderChart();
+    updateClearBtn();
+  });
+
+  // Clear the chart entirely: every compare chip AND the map-focused metro's
+  // line, leaving just the national reference. The map selection itself stays
+  // (the highlight, panel, and in-map card key off selectedCbsa, not focusedCbsa),
+  // so selecting a market again re-populates the chart with its line + chip.
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      if (!state.chartSelectedCbsas.length && !state.focusedCbsa) return;
+      state.focusedCbsa = null;   // drop the map-selected metro's auto-line too
+      try { chartChoices.removeActiveItems(); } catch (e) {}  // fires removeItem per chip
+      state.chartSelectedCbsas = [];
+      state.autoAddedChips.clear();
+      updateURL();
+      renderChart();
+      updateClearBtn();
+    });
+  }
+
+  // Reset the time window back to the Jan 2019 → latest default.
+  const resetBtn = document.getElementById("chart-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      state.chartZoomStart = null;   // → DEFAULT_CHART_START on render
+      state.chartZoomEnd   = null;   // → latest data point on render
+      renderChart();
+    });
+  }
+}
+
+// For a given (metric, period), return the row field the CHART plots.
+// Deliberately diverges from getValueFor() (map/table) for count metrics on
+// the Level view: the chart shows RAW counts (value_3m), not the per-1k-hh
+// figure. Rationale — a fixed-base per-1k Level over history would read as a
+// per-household-intensity trend it can't actually represent (the denominator
+// is constant), so the honest time series is the raw count. The map/table
+// keep per-1k for cross-metro comparison. YoY / vs-baseline are raw-equivalent
+// either way, so they're unaffected.
+function chartValueField(metric, period) {
+  return period;   // value_3m (raw), yoy_change, or vs_baseline_pct
+}
+
+async function renderChart() {
+  // Each call claims the next sequence number; after the (async) shard loads we
+  // bail if a newer render has since started, so a slow stale pass can't
+  // overwrite the latest one. Without this, clearing the compare box while a
+  // map-focused metro's shard was still loading left that metro's line behind.
+  const mySeq = ++chartRenderSeq;
+  const m = state.selectedMetric, p = state.selectedPeriod;
+  const field = chartValueField(m, p);
+
+  document.getElementById("chart-title").textContent =
+    `${METRICS[m].label} — ${getPeriodLabel(m, p)}`;
+
+  const toIso = monthStr => `${monthStr}-15`;
+
+  // Plot only the metros being compared + the auto-focused (selected) metro.
+  // Load each metro's small per-CBSA shard (~33 KB) instead of the metric's
+  // full all-CBSA history file (20–35 MB) — a large load-speed win that also
+  // scales as we add metrics. National reference comes from its own file.
+  const plotCodes = Array.from(new Set(
+    [...state.chartSelectedCbsas, state.focusedCbsa].filter(Boolean)
+  ));
+  const byCbsa = new Map();
+  const details = await Promise.all(
+    plotCodes.map(c => loadCbsaDetail(c).then(d => [c, d]).catch(() => [c, null]))
+  );
+  // A newer renderChart() started while we awaited shard loads — abandon this
+  // stale pass so it can't overwrite the newer chart state.
+  if (mySeq !== chartRenderSeq) return;
+  for (const [code, rows] of details) {
+    if (!Array.isArray(rows)) continue;
+    const pts = [];
+    for (const row of rows) {
+      if (row.metric !== m) continue;
+      const v = row[field];
+      if (v == null || !isFinite(v)) continue;
+      pts.push([toIso(row.month), v]);
+    }
+    pts.sort((a, b) => a[0].localeCompare(b[0]));
+    if (pts.length) byCbsa.set(code, pts);
+  }
+
+  const series = [];
+
+  // National reference (dashed). Drawn first so it sits behind the metros.
+  // For count metrics on the raw-count Level view, the US national raw count
+  // (millions) would dwarf metro lines (thousands) on one axis — so we hide it
+  // ONLY once one or more metros are plotted. With no metros selected we still
+  // show the US line, so the chart is never blank (the prior behavior left
+  // count-metric Level with nothing to draw). It always shows for
+  // rates/prices/indices and for the YoY / vs-baseline views.
+  const isCountLevel = COUNT_METRICS.has(m) && p === "value_3m";
+  // Suppress the U.S. line on count-metric Level views only when a selected
+  // metro ACTUALLY has data to plot (byCbsa is populated above) — otherwise the
+  // raw U.S. counts would dwarf the metro line. If the selection has no data
+  // (e.g. a metro excluded from permits), keep the U.S. line so the chart is
+  // never blank.
+  const suppressNational = isCountLevel && byCbsa.size > 0;
+  const natSeries = suppressNational ? null : state.nationalReference?.[m];
+  if (Array.isArray(natSeries) && natSeries.length > 0) {
+    const natData = natSeries
+      .filter(r => r[field] != null && isFinite(r[field]))
+      .map(r => [toIso(r.month), r[field]])
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    if (natData.length > 0) {
+      series.push({
+        name: "United States",
+        type: "line",
+        data: natData,
+        smooth: false,
+        showSymbol: false,
+        connectNulls: false,
+        // color: drives the legend swatch. lineStyle.color drives the
+        // rendered line. Setting both keeps them synchronized.
+        color: CHART_NATIONAL_COLOR,
+        lineStyle: { color: CHART_NATIONAL_COLOR, width: 2, type: "dashed" },
+        z: 5,
+      });
+    }
+  }
+
+  // Selected + focused metros — one distinct color each (focused drawn first
+  // and slightly heavier so the clicked metro stands out).
+  const ordered = plotCodes.slice().sort(
+    (a, b) => (b === state.focusedCbsa) - (a === state.focusedCbsa));
+  ordered.forEach((cbsa, idx) => {
+    const points = byCbsa.get(cbsa);
+    if (!points || points.length === 0) return;
+    const lineColor = CHART_LINE_COLORS[idx % CHART_LINE_COLORS.length];
+    series.push({
+      name: state.cbsaLookup.get(cbsa)?.name || cbsa,
+      type: "line",
+      data: points,
+      smooth: false,
+      showSymbol: false,
+      connectNulls: false,
+      color: lineColor,                    // drives legend swatch
+      lineStyle: { color: lineColor, width: cbsa === state.focusedCbsa ? 2.75 : 2 },
+      z: 10 + idx,
+    });
+  });
+
+  // Update the meta line — kept to one concise line; the count-Level
+  // methodology nuance moves to a hover title so the visible text stays short.
+  const metaEl = document.getElementById("chart-meta");
+  metaEl.removeAttribute("title");
+  if (isCountLevel) {
+    // count metric, raw Level: US line shows until metros are added, then hides
+    metaEl.textContent = plotCodes.length === 0
+      ? "U.S. total (raw counts), dashed. Pick markets to compare."
+      : "Raw counts — magnitudes differ by metro size.";
+    metaEl.title = "Raw counts aren't per-household, so magnitudes scale with metro size. " +
+                   "Use Year-over-year or vs-2017–19 for size-free comparison. " +
+                   "The U.S. line hides once markets are added.";
+  } else if (plotCodes.length === 0) {
+    metaEl.textContent = natSeries
+      ? "National reference dashed. Pick markets to compare, or click one on the map."
+      : "Pick markets to compare, or click one on the map. (No national reference.)";
+  } else {
+    metaEl.textContent = natSeries
+      ? "National reference dashed; selected markets in distinct colors."
+      : "Selected markets in distinct colors. (No national reference.)";
+  }
+
+  // Full data extent (timestamps) across every plotted series — drives the
+  // dataZoom slider's track and the percent↔timestamp conversions.
+  let dataMin = Infinity, dataMax = -Infinity;
+  for (const s of series) {
+    for (const pt of s.data) {
+      const ts = Date.parse(pt[0]);
+      if (ts < dataMin) dataMin = ts;
+      if (ts > dataMax) dataMax = ts;
+    }
+  }
+  const hasExtent = isFinite(dataMin) && isFinite(dataMax) && dataMax > dataMin;
+  state._chartExtent = hasExtent ? { min: dataMin, max: dataMax } : null;
+
+  // Default visible window: Jan 2019 → latest. The slider TRACK still spans
+  // the full history, so dragging the left handle reveals older data.
+  const zoomStart = state.chartZoomStart != null ? state.chartZoomStart : DEFAULT_CHART_START;
+  const zoomEnd   = state.chartZoomEnd   != null ? state.chartZoomEnd   : dataMax;
+
+  state._applyingZoom = true;   // suppress our own dataZoom event during setOption
+  chart.setOption({
+    // grid.top leaves room for the legend; grid.bottom for the slider + labels.
+    grid: { left: 56, right: 24, top: 36, bottom: 64 },
+    dataZoom: hasExtent ? [{
+      type: "slider",
+      xAxisIndex: 0,
+      filterMode: "filter",          // y-axis rescales to the visible window
+      startValue: zoomStart,
+      endValue: zoomEnd,
+      bottom: 10,
+      height: 22,
+      borderColor: "transparent",
+      backgroundColor: "transparent",
+      dataBackground: { lineStyle: { color: "#cfd5e0" }, areaStyle: { color: "#eef1f6" } },
+      selectedDataBackground: { lineStyle: { color: "#9ebcda" }, areaStyle: { color: "#dbe7f3" } },
+      fillerColor: "rgba(10,132,255,0.10)",
+      handleStyle: { color: "#0a84ff", borderColor: "#0a84ff" },
+      moveHandleStyle: { color: "#0a84ff" },
+      textStyle: { color: "#6b7280", fontFamily: CHART_FONT },
+      labelFormatter: val => fmtMonth(val),
+    }] : [],
+    legend: series.length > 0 ? {
+      show: true, top: 0, type: "scroll",
+      textStyle: { color: "#6b7280", fontFamily: CHART_FONT },
+    } : { show: false },
+    xAxis: {
+      type: "time",
+      axisLine: { lineStyle: { color: "#9ca3af" } },
+      // Year-only labels. ECharts' time axis auto-selects tick density
+      // based on plot width — for narrower windows it naturally falls back
+      // to every 2nd, 5th, or 10th year. Object formatter suppresses
+      // month/day/hour labels so even fine-grained ticks read "" instead
+      // of a noisy date string.
+      axisLabel: {
+        color: "#6b7280",
+        fontFamily: CHART_FONT,
+        formatter: {
+          year:   "{yyyy}",
+          month:  "",
+          day:    "",
+          hour:   "",
+          minute: "",
+          second: ""
+        },
+        hideOverlap: true,
+      },
+    },
+    yAxis: {
+      type: "value",
+      scale: true,               // fit the visible window, don't force a zero baseline
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: "#eef0f4" } },
+      axisLabel: {
+        color: "#6b7280",
+        fontFamily: CHART_FONT,
+        formatter: v => compactAxisLabel(m, p, v),
+      },
+    },
+    tooltip: {
+      trigger: "axis",
+      formatter: items => {
+        if (!items || items.length === 0) return "";
+        // axisValue for a time axis is the epoch-ms timestamp; reformat to
+        // a friendly "April '26" for tooltip readability.
+        const monthYear = fmtMonth(items[0].axisValue);
+        const lines = items.map(it =>
+          `${it.marker} ${it.seriesName}: ${formatForPeriod(m, p, it.data[1])}`
+        ).join("<br>");
+        return `<strong>${monthYear}</strong><br>${lines}`;
+      },
+    },
+    series,
+  }, true);
+  state._applyingZoom = false;
+}
+
+// -------- metro detail panel (CBSA drill-down) -----------------------------
+
+// Sign → delta color class (shared by the metro panel + the in-map callout).
+function deltaSignClass(v) {
+  return (v == null || !isFinite(v)) ? "delta-neutral"
+       : v > 0 ? "delta-positive"
+       : v < 0 ? "delta-negative"
+       : "delta-neutral";
+}
+
+// One metric "card" of HTML for a CBSA: metric label, formatted level (+ a
+// "per 1,000 households" note for count metrics), YoY + vs-2017–19 pills with
+// sign coloring, and the as-of month. Shared by the metro detail panel
+// (showMetroPanel) and the in-map card (renderMapMetricCard) so both read
+// identically. `selected` adds the brand-accent class.
+function metricCardHTML(cbsaCode, m, selected) {
+  const summary = state.summary[cbsaCode] || {};
+  const cls  = "metric-card" + (selected ? " metric-card--selected" : "");
+  const cell = summary[m];
+  if (!cell) {
+    return `<div class="${cls}">
+              <div class="name">${METRICS[m].label}</div>
+              <div class="value">—</div>
+              <span class="as-of">No data</span>
+            </div>`;
+  }
+  // For count metrics the per-1k-hh level is the comparable figure; for others
+  // value_3m is already in native units.
+  const levelRaw = COUNT_METRICS.has(m) ? cell.value_per_1k_hh_3m : cell.value_3m;
+  const level    = METRICS[m].format_value(levelRaw);
+  const unitNote = COUNT_METRICS.has(m)
+    ? ` <span style="font-size:12px;font-weight:400;color:var(--text-muted)">per 1,000 households</span>` : "";
+  const yoyRaw   = cell.yoy_change;
+  const vsBlRaw  = cell.vs_baseline_pct;
+  const yoy      = METRICS[m].format_change_pct(yoyRaw);
+  const vsBl     = METRICS[m].format_change_pct(vsBlRaw);
+  return `<div class="${cls}">
+            <div class="name">${METRICS[m].label}</div>
+            <div class="value">${level}${unitNote}</div>
+            <div class="pills">
+              <span class="pill">YoY <span class="${deltaSignClass(yoyRaw)}">${yoy}</span></span>
+              <span class="pill">vs 2017–19 <span class="${deltaSignClass(vsBlRaw)}">${vsBl}</span></span>
+            </div>
+            <span class="as-of">As of ${fmtMonth(cell.as_of_month)}</span>
+          </div>`;
+}
+
+function showMetroPanel(cbsaCode) {
+  // Swap the right column from the national table to the metro detail panel.
+  const panel = document.getElementById("metro-panel");
+  document.getElementById("table-panel").hidden = true;
+  panel.hidden = false;
+  // Reset scroll only when the metro actually changes — don't yank the user's
+  // scroll position on a metric/period re-render of the same metro.
+  if (panel.dataset.cbsa !== cbsaCode) panel.scrollTop = 0;
+  panel.dataset.cbsa = cbsaCode;
+  document.getElementById("metro-title").textContent =
+    state.cbsaLookup.get(cbsaCode)?.name || cbsaCode;
+
+  const rank = state.cbsaLookup.get(cbsaCode)?.rank;
+  const zipNote = zipAvailable(cbsaCode, state.selectedMetric)
+    ? "ZIP-level detail shown on the map"
+    : (state.cbsaLookup.get(cbsaCode)?.has_zip
+        ? "ZIP-level detail available on Realtor.com metrics"
+        : "CBSA-level metrics");
+  document.getElementById("metro-subtitle").textContent =
+    (rank != null ? `#${rank} by households · ` : "") + zipNote;
+
+  // Card layout depends on the map mode:
+  //  - ZIP-drilldown mode: the selected metric's accented card pins to the top
+  //    of the panel (today's layout); there is no in-map callout.
+  //  - Regional (non-ZIP) mode: the selected metric is shown in the in-map
+  //    card connected to the polygon (renderMapMetricCard) instead, so the panel
+  //    OMITS it here and lists all OTHER metrics — no duplicate in the panel's
+  //    prime slot.
+  // Order: [selected card if ZIP mode] → annual baseline (#metro-acs, which
+  // sits between the two containers in the DOM) → remaining cards in registry order.
+  const sel = state.selectedMetric;
+  const hasMapCard = !zipAvailable(cbsaCode, sel);
+  document.getElementById("metro-metrics").innerHTML =
+    hasMapCard ? "" : (METRICS[sel] ? metricCardHTML(cbsaCode, sel, true) : "");
+  document.getElementById("metro-metrics-rest").innerHTML =
+    Object.keys(METRICS).filter(m => m !== sel)
+      .map(m => metricCardHTML(cbsaCode, m, false)).join("");
+
+  // ACS baseline panel — each row carries a Top-X rank chip + a "vs U.S."
+  // magnitude where data allows.
+  const acs = state.acsByCbsa.get(cbsaCode);
+  if (acs) {
+    const X = topXForRank(state.cbsaLookup.get(cbsaCode)?.rank);
+    const poolNote = X ? `<div class="vintage">Ranks compare the ${X} largest metros by households.</div>` : "";
+    document.getElementById("metro-acs").innerHTML = `
+      <h3>Annual baseline</h3>
+      <div class="vintage">ACS ${acs.acs_vintage} — 5-year pooled estimate</div>
+      ${renderAcsRow("Median household income",      acs.median_household_income, "$",    "median_household_income",  cbsaCode)}
+      ${renderAcsRow("Median gross rent",            acs.median_gross_rent,       "$/mo", "median_gross_rent",        cbsaCode)}
+      ${renderAcsRow("Median home value",            acs.median_home_value,       "$",    "median_home_value",        cbsaCode)}
+      ${renderAcsRow("Homeownership rate",           acs.homeownership_rate,      "pct",  "homeownership_rate",       cbsaCode)}
+      ${renderAcsRow("Renter cost-burdened 30%+",    acs.pct_renter_cost_burdened,"pct",  "pct_renter_cost_burdened", cbsaCode)}
+      ${renderAcsRow("Owner cost-burdened 30%+",     acs.pct_owner_cost_burdened, "pct",  "pct_owner_cost_burdened",  cbsaCode)}
+      ${renderAcsRow("Median year structure built",  acs.median_year_built,       "year", "median_year_built",        cbsaCode)}
+      ${poolNote}
+    `;
+  } else {
+    document.getElementById("metro-acs").innerHTML = "";
+  }
+}
+
+// ---- Top-X rank ladder (Houston's spec) -----------------------------------
+// X = smallest rung >= max(rank, 75) on the ladder 75 -> 100 -> 150 -> 200…
+// (multiples of 25 through 100, multiples of 50 beyond). Returns null if the
+// CBSA has no household rank.
+function topXForRank(rank) {
+  if (rank == null || !isFinite(rank)) return null;
+  const base = Math.max(rank, 75);
+  if (base <= 75)  return 75;
+  if (base <= 100) return 100;
+  return Math.ceil(base / 50) * 50;
+}
+
+// Rank of a CBSA on a measure among the Top-X largest metros (highest first).
+function rankAmongTopX(cbsaCode, measureKey) {
+  const selfRank = state.cbsaLookup.get(cbsaCode)?.rank;
+  const X = topXForRank(selfRank);
+  if (!X) return null;
+  const pool = [];
+  for (const [code, info] of state.cbsaLookup) {
+    if (info.rank == null || info.rank > X) continue;
+    const row = state.acsByCbsa.get(code);
+    const v = row ? row[measureKey] : null;
+    if (v == null || !isFinite(v)) continue;
+    pool.push({ code, v });
+  }
+  pool.sort((a, b) => b.v - a.v);   // descending: #1 = highest
+  const idx = pool.findIndex(p => p.code === cbsaCode);
+  if (idx < 0) return null;
+  return { rank: idx + 1, of: X };
+}
+
+// "vs U.S." magnitude string, formatted per measure kind.
+function acsVsNational(value, kind, measureKey) {
+  const natl = state.acsNational ? state.acsNational[measureKey] : null;
+  if (natl == null || !isFinite(natl) || value == null) return null;
+  if (kind === "$" || kind === "$/mo") {
+    const pct = value / natl - 1;
+    return `${pct >= 0 ? "+" : ""}${(pct * 100).toFixed(0)}% vs U.S.`;
+  }
+  if (kind === "pct") {
+    const ppt = (value - natl) * 100;
+    return `${ppt >= 0 ? "+" : ""}${ppt.toFixed(1)} ppt vs U.S.`;
+  }
+  if (kind === "year") {
+    const d = Math.round(value - natl);
+    if (d === 0) return "same as U.S.";
+    return `${d > 0 ? d + " yrs newer" : (-d) + " yrs older"} vs U.S.`;
+  }
+  return null;
+}
+
+function formatAcsValue(value, kind) {
+  if (value == null) return "—";
+  if (kind === "$" || kind === "$/mo") return "$" + Math.round(value).toLocaleString();
+  if (kind === "pct")  return (value * 100).toFixed(1) + "%";
+  if (kind === "year") return String(Math.round(value));
+  return String(value);
+}
+
+function renderAcsRow(label, value, kind, measureKey, cbsaCode) {
+  if (value == null) {
+    return `<div class="acs-row"><span class="acs-label">${label}</span>` +
+           `<span class="acs-figure"><span class="acs-val">—</span></span></div>`;
+  }
+  const valStr = formatAcsValue(value, kind);
+  const rk = rankAmongTopX(cbsaCode, measureKey);
+  const rankChip = rk
+    ? `<span class="acs-rank" title="Ranked highest-first among the ${rk.of} largest metros">#${rk.rank} of ${rk.of}</span>`
+    : "";
+  const vs = acsVsNational(value, kind, measureKey);
+  const vsLine = vs ? `<span class="acs-ctx">${vs}</span>` : "";
+  return `<div class="acs-row">
+            <span class="acs-label">${label}</span>
+            <span class="acs-figure">
+              <span class="acs-val">${valStr}</span>${rankChip}
+              ${vsLine}
+            </span>
+          </div>`;
+}
+
+function returnToNational() {
+  state.selectedCbsa  = null;
+  state.focusedCbsa   = null;
+  state.zipActiveCbsa = null;
+  clearZipLayer();
+
+  // Undo chips that were added as a selection side-effect (covers the A-then-B
+  // browse sequence — both A and B are auto-added and both come off here).
+  // Hand-picked comparison chips are left in place.
+  if (state.autoAddedChips.size && chartChoices) {
+    state._programmaticChip = true;
+    try {
+      for (const code of [...state.autoAddedChips]) {
+        try { chartChoices.removeActiveItemsByValue(code); } catch (e) {}
+        // each fires removeItem → handler prunes chartSelectedCbsas + the Set
+      }
+    } finally { state._programmaticChip = false; }
+    state.autoAddedChips.clear();   // belt-and-braces if an event didn't fire
+  }
+
+  // Swap the right column back to the table.
+  document.getElementById("metro-panel").hidden = true;
+  document.getElementById("table-panel").hidden = false;
+  if (table) table.redraw(true);   // Tabulator needs a redraw after being hidden
+  syncMetroDropdown("");
+  updateURL();
+  renderMap();
+  state._cameraFor = "national";
+  map.setView([39.8283, -98.5795], 4);
+  renderChart();
+}
+
+// -------- selection + URL state --------------------------------------------
+
+function selectCbsa(cbsaCode) {
+  if (!state.cbsaLookup.has(cbsaCode)) return;
+  state.selectedCbsa = cbsaCode;
+  state.focusedCbsa  = cbsaCode;   // drawn heavier on the chart + described in the panel
+  ensureMetroInChart(cbsaCode);    // also show it as a chip in the compare box
+  updateURL();
+  showMetroPanel(cbsaCode);
+  syncMetroDropdown(cbsaCode);
+  renderMap();     // routes to ZIP-zoom (capable metric+metro) or national+highlight
+  renderChart();
+}
+
+// Make sure the selected metro appears in the chart's compare box (so the box,
+// legend, and line all agree). The chip is flagged "auto-added" (a selection
+// side-effect) via the _programmaticChip flag the addItem handler reads. Cap
+// policy: evict the OLDEST auto-added chip only — a hand-picked comparison is
+// never silently dropped. If all 5 chips are hand-picked, skip the chip
+// entirely; the selected metro still plots via state.focusedCbsa (a 6th line,
+// 6th color).
+function ensureMetroInChart(cbsaCode) {
+  if (!chartChoices) return;
+  if (state.chartSelectedCbsas.includes(cbsaCode)) return;   // keeps its current ownership
+  if (state.chartSelectedCbsas.length >= CHART_MAX_METROS) {
+    const evict = state.chartSelectedCbsas.find(c => state.autoAddedChips.has(c));
+    if (!evict) return;   // all hand-picked → don't add a chip (focused line still shows)
+    state._programmaticChip = true;
+    try { chartChoices.removeActiveItemsByValue(evict); } finally { state._programmaticChip = false; }
+    // removeItem handler prunes chartSelectedCbsas + autoAddedChips.
+  }
+  // maxItemCount only gates USER adds; setChoiceByValue bypasses it, so the
+  // skip-at-cap branch above is what actually enforces the cap.
+  state._programmaticChip = true;
+  try { chartChoices.setChoiceByValue(cbsaCode); } finally { state._programmaticChip = false; }
+  // Choices fires addItem synchronously, so the handler sees _programmaticChip.
+}
+
+// Keep the "Jump to metro" dropdown in sync without firing its change handler.
+function syncMetroDropdown(cbsaCode) {
+  if (!metroChoices) return;
+  state._syncingMetro = true;
+  try {
+    metroChoices.removeActiveItems();                       // always clear first
+    if (cbsaCode) metroChoices.setChoiceByValue(cbsaCode);  // then set the new one
+  } catch (e) { /* ignore */ }
+  finally { state._syncingMetro = false; }   // never leave the guard stuck
+}
+
+function updateURL() {
+  const params = new URLSearchParams();
+  params.set("metric", state.selectedMetric);
+  params.set("period", state.selectedPeriod);
+  if (state.selectedCbsa) params.set("cbsa", state.selectedCbsa);
+  // Persist HAND-PICKED chips only — never the auto-added (selection side-effect)
+  // ones. This makes the ?cbsa= restore round-trip exactly: on reload, compare=
+  // seeds hand-owned chips, then selectCbsa() re-adds the selected metro as an
+  // auto chip, and Return-to-national on the restored page removes only that one.
+  const handChips = state.chartSelectedCbsas.filter(c => !state.autoAddedChips.has(c));
+  if (handChips.length > 0) params.set("compare", handChips.join(","));
+  history.replaceState(null, "", "?" + params.toString());
+}
+
+function readUrlState() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("metric") && METRICS[params.get("metric")]) {
+    state.selectedMetric = params.get("metric");
+  }
+  if (params.has("period") && PERIOD_LABELS[params.get("period")]) {
+    state.selectedPeriod = params.get("period");
+  }
+  if (params.has("compare")) {
+    state.chartSelectedCbsas = params.get("compare")
+      .split(",").map(s => s.trim()).filter(Boolean)
+      .slice(0, CHART_MAX_METROS);
+  }
+  // CBSA opened after main render via openDrawer.
+}
+
+// -------- helpers ----------------------------------------------------------
+
+// Shared month formatter → "April '26" (full month name + apostrophe-2-digit
+// year). Accepts a "YYYY-MM"/"YYYY-MM-DD" string (parsed tz-free by regex), a
+// Date, or an epoch-ms number (ECharts time-axis values — read in UTC because
+// the axis stores month points as UTC midnight, so local getters could slip a
+// boundary date into the prior month). Returns "—" for null/unparseable input.
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+function fmtMonth(input) {
+  if (input == null) return "—";
+  let y, m;
+  if (input instanceof Date) {
+    y = input.getUTCFullYear(); m = input.getUTCMonth() + 1;
+  } else if (typeof input === "number") {
+    const d = new Date(input);
+    y = d.getUTCFullYear(); m = d.getUTCMonth() + 1;
+  } else {
+    const mt = String(input).match(/^(\d{4})-(\d{2})/);
+    if (!mt) return String(input);   // not a recognizable YYYY-MM — pass through
+    y = +mt[1]; m = +mt[2];
+  }
+  if (!y || m < 1 || m > 12) return "—";
+  return `${MONTH_NAMES[m - 1]} ’${String(y).slice(-2)}`;   // curly apostrophe, e.g. April ’26
+}
+
+function getValueFor(cbsa, metric, period) {
+  const byMetric = state.summary[cbsa];
+  if (!byMetric) return null;
+  const m = byMetric[metric];
+  if (!m) return null;
+  // For count metrics, substitute per-1k-household projections so values
+  // are comparable across metros of any size.
+  if (COUNT_METRICS.has(metric)) {
+    if (period === "value_3m")   return m.value_per_1k_hh_3m;
+    if (period === "yoy_change") return m.value_per_1k_hh_yoy;
+  }
+  return m[period];
+}
+
+function formatForPeriod(metric, period, value) {
+  if (value == null || !isFinite(value)) return "—";
+  if (period === "value_3m") return METRICS[metric].format_value(value);
+  return METRICS[metric].format_change_pct(value);
+}
+
+// Whole-number formatter for the map legend + chart y-axis: percentages and
+// ppt round to integers (e.g. "12%", "12 ppt") so the scale stays uncluttered.
+// Level-view values use the normal format. Tooltips and the table keep the
+// 1-decimal precision from format_change_pct's default.
+function formatScale(metric, period, value) {
+  if (value == null || !isFinite(value)) return "—";
+  if (period === "value_3m") return formatForPeriod(metric, period, value);
+  return METRICS[metric].format_change_pct(value, 0);
+}
+
+// Abbreviate a magnitude for a compact axis tick: 1.2M, 350K, 3.5K, 540.
+const _compactMag = v => {
+  const a = Math.abs(v);
+  if (a >= 1e9) return (+(v / 1e9).toFixed(1)) + "B";   // 1.2B, 12B
+  if (a >= 1e6) return (+(v / 1e6).toFixed(1)) + "M";   // 1.2M, 12M
+  if (a >= 1e4) return Math.round(v / 1e3) + "K";       // 14K, 350K
+  if (a >= 1e3) return (+(v / 1e3).toFixed(1)) + "K";   // 3.5K, 2.3K
+  return String(Math.round(v));
+};
+
+// Y-axis tick formatter for the time chart. Only the Level view is abbreviated,
+// and only where it saves space: dollar metrics → "$540K" / "$1.2M"; large raw
+// counts → "14K" / "3.5M". Small-magnitude metrics (rates, months, days,
+// ratios) and the % views (YoY, vs-2017–19) keep full precision via
+// formatForPeriod. The tooltip is unaffected — it always shows full precision.
+function compactAxisLabel(metric, period, v) {
+  if (v == null || !isFinite(v)) return "";
+  if (period !== "value_3m") return METRICS[metric].format_change_pct(v, 0);  // whole % / ppt on the axis
+  const unit = METRICS[metric]?.unit || "";
+  if (unit.startsWith("$")) {
+    const a = Math.abs(v);
+    if (a >= 1e6) return "$" + (+(v / 1e6).toFixed(1)) + "M";
+    if (a >= 1e4) return "$" + Math.round(v / 1e3) + "K";
+    if (a >= 1e3) return "$" + (+(v / 1e3).toFixed(1)) + "K";
+    return "$" + Math.round(v).toLocaleString();
+  }
+  if (COUNT_METRICS.has(metric)) {
+    return Math.abs(v) >= 1e3 ? _compactMag(v) : Math.round(v).toLocaleString();
+  }
+  return formatForPeriod(metric, period, v);  // rates / months / days / ratios
+}
+
+// -------- UI wiring --------------------------------------------------------
+
+let metroChoices = null;   // "Jump to metro" dropdown instance
+
+// Full-screen toggle for the whole dashboard. Uses the Fullscreen API on the
+// .app container (works standalone and embedded if the iframe allows it),
+// with a webkit fallback. Swaps the masthead icon and resizes Leaflet on
+// change so the map repaints to the new dimensions.
+function initFullscreen() {
+  const btn = document.getElementById("fullscreen-btn");
+  const btnBar = document.getElementById("fullscreen-btn-bar");  // mirror in filter bar
+  const appEl = document.querySelector(".app");
+  if (!btn || !appEl) return;
+  const iconPath = document.getElementById("fs-icon-path");
+  const iconPathBar = document.getElementById("fs-icon-path-bar");
+
+  // The button shows ONLY the action it will perform next — a single glyph,
+  // never both. "expand" while windowed (the click enters fullscreen),
+  // "contract" while fullscreen (the click exits). sync() swaps the one path.
+  const PATH_EXPAND   = "M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4";
+  const PATH_CONTRACT = "M9 4v4a1 1 0 0 1-1 1H4M15 4v4a1 1 0 0 0 1 1h4M9 20v-4a1 1 0 0 0-1-1H4M15 20v-4a1 1 0 0 1 1-1h4";
+
+  const isFs = () => document.fullscreenElement || document.webkitFullscreenElement;
+
+  const toggle = () => {
+    try {
+      const p = !isFs()
+        ? (appEl.requestFullscreen || appEl.webkitRequestFullscreen || (()=>{})).call(appEl)
+        : (document.exitFullscreen || document.webkitExitFullscreen || (()=>{})).call(document);
+      if (p && typeof p.catch === "function") p.catch(() => {});  // ignore gesture/permission rejections
+    } catch (e) { /* fullscreen unsupported — no-op */ }
+  };
+  btn.addEventListener("click", toggle);
+  if (btnBar) btnBar.addEventListener("click", toggle);
+
+  const sync = () => {
+    const on = !!isFs();
+    const d = on ? PATH_CONTRACT : PATH_EXPAND;
+    const title = on ? "Exit full screen" : "Enter full screen";
+    if (iconPath) iconPath.setAttribute("d", d);
+    if (iconPathBar) iconPathBar.setAttribute("d", d);
+    btn.title = title; btn.setAttribute("aria-label", title);
+    if (btnBar) { btnBar.title = title; btnBar.setAttribute("aria-label", title); }
+    // Leaflet must recompute its size after the viewport changes.
+    setTimeout(() => { if (map) map.invalidateSize(); }, 120);
+  };
+  document.addEventListener("fullscreenchange", sync);
+  document.addEventListener("webkitfullscreenchange", sync);
+  sync();  // set the correct single glyph at startup (windowed → expand)
+
+  // Keep a fullscreen control always reachable: when the masthead button
+  // scrolls out of view, reveal the mirrored button in the sticky filter bar;
+  // hide it again once the masthead button is back in view.
+  if (btnBar && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => {
+      btnBar.hidden = entries[0].isIntersecting;
+    }, { threshold: 0 });
+    io.observe(btn);
+  }
+}
+
+function initControls() {
+  // Metric picker — grouped by source via <optgroup>.
+  const metricSel = document.getElementById("metric-select");
+  METRIC_GROUPS.forEach(group => {
+    const og = document.createElement("optgroup");
+    og.label = group.label;
+    group.metrics.forEach(key => {
+      if (!METRICS[key]) return;
+      const opt = document.createElement("option");
+      opt.value = key; opt.textContent = METRICS[key].label;
+      if (key === state.selectedMetric) opt.selected = true;
+      og.appendChild(opt);
+    });
+    metricSel.appendChild(og);
+  });
+  new Choices(metricSel, { searchEnabled: true, itemSelectText: "", shouldSort: false });
+  metricSel.addEventListener("change", e => {
+    state.selectedMetric = e.target.value;
+    updateURL();
+    renderMap();
+    refreshTable();
+    if (state.selectedCbsa) showMetroPanel(state.selectedCbsa);  // refresh ZIP note/cards
+    renderChart();
+  });
+
+  const periodSel = document.getElementById("period-select");
+  periodSel.value = state.selectedPeriod;
+  // Choices (no search) so the open menu matches Metric + Jump to market.
+  new Choices(periodSel, { searchEnabled: false, shouldSort: false, itemSelectText: "" });
+  periodSel.addEventListener("change", e => {
+    state.selectedPeriod = e.target.value;
+    updateURL();
+    renderMap();
+    refreshTable();
+    renderChart();
+  });
+
+  // "Jump to metro" dropdown — always present; selecting = same as a map click.
+  const metroSel = document.getElementById("metro-select");
+  const metroOpts = [];
+  for (const [code, info] of state.cbsaLookup) {
+    if (code === "USA") continue;
+    metroOpts.push({ value: code, label: info.name || code, rank: info.rank });
+  }
+  metroOpts.sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || a.label.localeCompare(b.label));
+  const placeholder = document.createElement("option");
+  placeholder.value = ""; placeholder.textContent = "Select a market…";
+  metroSel.appendChild(placeholder);
+  metroOpts.forEach(o => {
+    const el = document.createElement("option");
+    el.value = o.value; el.textContent = o.label;
+    metroSel.appendChild(el);
+  });
+  metroChoices = new Choices(metroSel, {
+    searchEnabled: true, searchResultLimit: 20, shouldSort: false,
+    itemSelectText: "", placeholder: true, placeholderValue: "Select a market…",
+  });
+  metroSel.addEventListener("change", e => {
+    if (state._syncingMetro) return;
+    const code = e.target.value;
+    if (code) selectCbsa(code); else returnToNational();
+  });
+
+  // Return-to-national: the prominent floating pill on the map, and the
+  // "← All markets" back button at the top of the metro detail panel.
+  document.getElementById("map-return").addEventListener("click", returnToNational);
+  document.getElementById("metro-back").addEventListener("click", returnToNational);
+
+  // Full-screen toggle (whole dashboard).
+  initFullscreen();
+}
+
+// (The separate Inflation tab + its routing/table were removed; the dashboard
+//  is now a single view. National CPI context lives on the strip card.)
+
+// -------- embed auto-height ------------------------------------------------
+// When framed (embed mode), broadcast the page's content height to the host so
+// it can size the iframe to fit exactly — never clipped, never extra whitespace.
+// The host's embed snippet listens for { type:"inman-embed-height", height } and
+// sets iframe.style.height. Re-sends on load, resize, font swap, and any content
+// resize (metro select, mobile reflow, chart changes) via ResizeObserver.
+function initEmbedHeight() {
+  if (!document.documentElement.classList.contains("embed")) return;
+  let last = 0, raf = 0;
+  const send = () => {
+    const h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    if (h && Math.abs(h - last) > 1) {
+      last = h;
+      try { window.parent.postMessage({ type: "inman-embed-height", height: h }, "*"); } catch (e) {}
+    }
+  };
+  const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(send); };
+  window.addEventListener("resize", schedule);
+  if (window.ResizeObserver) new ResizeObserver(schedule).observe(document.body);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
+  [0, 300, 800, 1800].forEach(ms => setTimeout(schedule, ms)); // catch late layout (Leaflet/charts/fonts)
+  schedule();
+}
+
+// -------- bootstrap --------------------------------------------------------
+
+async function main() {
+  try {
+    readUrlState();
+    await loadInitialData();
+    initMap();
+    initTable();
+    initChart();
+    initChartControls();
+    initControls();
+    renderMap();
+    refreshTable();
+    renderChart();
+
+    // Footer "as of" line — month-year, matching every other date on the page.
+    const asof = fmtMonth(state.manifest?.refresh_run_at?.slice(0, 7));
+    document.getElementById("footer-asof").innerHTML =
+      ` &middot; Data refresh: ${asof}`;
+
+    // Open drawer if URL specifies a CBSA.
+    const params = new URLSearchParams(location.search);
+    if (params.has("cbsa")) selectCbsa(params.get("cbsa"));
+
+    document.getElementById("map-loading").classList.add("hidden");
+    initEmbedHeight();   // broadcast height to the host page when embedded
+  } catch (err) {
+    console.error(err);
+    document.getElementById("map-loading").innerHTML =
+      `<div style="color:var(--inman-red);text-align:center;padding:20px;">
+         Failed to load dashboard data.<br>${err.message}
+       </div>`;
+  }
+}
+
+main();
+</script>
+
+</body>
+</html>

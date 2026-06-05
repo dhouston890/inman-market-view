@@ -1,0 +1,150 @@
+{
+  "schema_version": "1.0",
+  "refresh_run_at": "2026-06-22T21:42:59Z",
+  "metrics": [
+    {
+      "metric": "nonfarm_employment",
+      "latest_month": "2026-05",
+      "n_cbsas": 388
+    },
+    {
+      "metric": "permits_1unit",
+      "latest_month": "2026-05",
+      "n_cbsas": 43
+    },
+    {
+      "metric": "permits_total",
+      "latest_month": "2026-05",
+      "n_cbsas": 21
+    },
+    {
+      "metric": "realtor_active_listings",
+      "latest_month": "2026-05",
+      "n_cbsas": 926
+    },
+    {
+      "metric": "realtor_days_on_market",
+      "latest_month": "2026-05",
+      "n_cbsas": 926
+    },
+    {
+      "metric": "realtor_list_price",
+      "latest_month": "2026-05",
+      "n_cbsas": 926
+    },
+    {
+      "metric": "realtor_new_listings",
+      "latest_month": "2026-05",
+      "n_cbsas": 926
+    },
+    {
+      "metric": "redfin_homes_sold",
+      "latest_month": "2026-04",
+      "n_cbsas": 82
+    },
+    {
+      "metric": "redfin_median_sale_price",
+      "latest_month": "2026-04",
+      "n_cbsas": 83
+    },
+    {
+      "metric": "redfin_months_supply",
+      "latest_month": "2026-04",
+      "n_cbsas": 82
+    },
+    {
+      "metric": "unemployment_rate",
+      "latest_month": "2026-05",
+      "n_cbsas": 382
+    },
+    {
+      "metric": "zhvi",
+      "latest_month": "2026-05",
+      "n_cbsas": 855
+    },
+    {
+      "metric": "zillow_for_sale_inventory",
+      "latest_month": "2026-05",
+      "n_cbsas": 871
+    },
+    {
+      "metric": "zillow_sales_count",
+      "latest_month": "2026-05",
+      "n_cbsas": 294
+    },
+    {
+      "metric": "zillow_sales_per_listing",
+      "latest_month": "2026-05",
+      "n_cbsas": 294
+    },
+    {
+      "metric": "zillow_transaction_value",
+      "latest_month": "2026-04",
+      "n_cbsas": 758
+    },
+    {
+      "metric": "zori",
+      "latest_month": "2026-05",
+      "n_cbsas": 711
+    }
+  ],
+  "national": {},
+  "cpi": {},
+  "acs": {
+    "vintage": "2019-2023",
+    "n_cbsas": 935
+  },
+  "tier2_status": [
+    {
+      "source": "zhvi",
+      "status": "green",
+      "message": "OK",
+      "n_rows": 224731,
+      "n_cbsas": 854
+    },
+    {
+      "source": "zori",
+      "status": "green",
+      "message": "OK",
+      "n_rows": 50075,
+      "n_cbsas": 710
+    },
+    {
+      "source": "redfin",
+      "status": "green",
+      "message": "OK",
+      "n_rows": 56741,
+      "n_cbsas": 83
+    },
+    {
+      "source": "sales_count",
+      "status": "green",
+      "message": "OK",
+      "n_rows": 64255,
+      "n_cbsas": 293
+    },
+    {
+      "source": "for_sale_inventory",
+      "status": "green",
+      "message": "OK",
+      "n_rows": 87694,
+      "n_cbsas": 870
+    },
+    {
+      "source": "transaction_value",
+      "status": "green",
+      "message": "OK",
+      "n_rows": 124563,
+      "n_cbsas": 757
+    }
+  ],
+  "cbsa_tiers": {
+    "threshold": {
+      "min_core_metrics": 4,
+      "recency_months": 6,
+      "core_metrics": ["permits_1unit", "permits_total", "unemployment_rate", "nonfarm_employment", "zhvi", "zori", "redfin_median_sale_price", "redfin_homes_sold", "redfin_months_supply", "realtor_list_price", "realtor_active_listings", "realtor_new_listings", "realtor_days_on_market", "zillow_sales_count", "zillow_for_sale_inventory"]
+    },
+    "n_full": 925,
+    "n_partial": 10
+  }
+}
